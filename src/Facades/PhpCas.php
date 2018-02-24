@@ -5,14 +5,14 @@
  * Date: 2018/2/24
  * Time: 14:38
  */
-namespace Iwannamaybe\PhpCas;
+namespace Iwannamaybe\PhpCas\Facades;
 
 use Illuminate\Support\Facades\Facade;
 
 /**
  * @see \Iwannamaybe\PhpCas\Cas
  */
-class CasFacade extends Facade
+class PhpCas extends Facade
 {
 	/**
 	 * Get the registered name of the component.
@@ -21,6 +21,6 @@ class CasFacade extends Facade
 	 */
 	protected static function getFacadeAccessor()
 	{
-		return 'cas';
+		return 'phpcas';
 	}
 }
