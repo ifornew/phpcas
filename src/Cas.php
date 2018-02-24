@@ -25,50 +25,46 @@ class Cas
 	}
 
 	/**
-	 * Get phpcas login url
+	 * Get phpcas login uri
+	 *
+	 * @param string $redirect redirect back uri
 	 * @return string
 	 */
-	public function getLoginUrl($redirect = null)
+	public function getLoginUri($redirect = null)
 	{
-		$current_url = $redirect ?? url()->current();
-		if ($this->casPort == 443) {
-			$cas_base_url = "https://{$this->casHostName}:{$this->casLoginUri}";
-		} elseif ($this->casPort == 80) {
-			$cas_base_url = "http://{$this->casHostName}{$this->casLoginUri}";
-		} else {
-			$cas_base_url = "http://{$this->casHostName}:{$this->casPort}{$this->casLoginUri}";
-		}
-		return "$cas_base_url?service={$current_url}&channel={$this->casChannel}";
+		return $this->casClient->getLoginUri($redirect);
 	}
 
 	/**
-	 * Sso register url
+	 * Get phpcas register uri
+	 *
+	 * @param string $redirect redirect back uri
 	 * @return string
 	 */
-	public function ssoRegisterUrl()
+	public function getRegisterUri($redirect = null)
 	{
-		$current_url = url()->current();
-		if ($this->casPort == 443) {
-			$sso_base_url = "https://{$this->casHostName}:{$this->casRegisterUri}";
-		} elseif ($this->casPort == 80) {
-			$sso_base_url = "http://{$this->casHostName}{$this->casRegisterUri}";
-		} else {
-			$sso_base_url = "http://{$this->casHostName}:{$this->casPort}{$this->casRegisterUri}";
-		}
-		return "$sso_base_url?service={$current_url}&channel={$this->casChannel}";
+		return $this->casClient->getRegisterUri($redirect);
 	}
 
 	/**
-	 * Force sso verify
+	 * Get phpcas logout uri
+	 *
+	 * @param string $redirect redirect back uri
+	 * @return string
+	 */
+	public function getLogoutUri($redirect = null)
+	{
+		return $this->casClient->getLogoutUri($redirect);
+	}
+
+	/**
+	 * Force phpcas verify
+	 *
 	 * @return bool
 	 */
 	public function forceAuthentication()
 	{
-		//TODO:Cas模拟
-		if (config('cas.cas_fake')) {
-			return true;
-		}
-		return Cas::forceAuthentication();
+		return $this->casClient->forceAuthentication();
 	}
 
 	/**
@@ -88,12 +84,12 @@ class Cas
 	}
 
 	/**
-	 * Sso loginout
+	 * phpcas loginout
 	 *
-	 * @param null $redirect sso logout redirect url
+	 * @param string $redirect phpcas logout redirect url
 	 */
 	public function logout($redirect = null)
 	{
-		Cas::logout(['service' => $redirect ?? url()->previous()]);
+		$this->casClient->logout($redirect);
 	}
 }
