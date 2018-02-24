@@ -42,7 +42,7 @@
         "Iwannamaybe\\PhpCas\\PhpCasServiceProvider"
       ],
       "aliases": {
-        "PhpCas": "Iwannamaybe\\PhpCas\\Cas"
+        "PhpCas": "Iwannamaybe\\PhpCas\\Facades\\Cas"
       }
     }
   },
