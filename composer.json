@@ -1,0 +1,50 @@
+{
+  "name": "iwannamaybe/phpcas",
+  "description": "PhpCas client for the Laravel Framework",
+  "keywords": [
+    "iwannamaybe",
+    "laravel",
+    "phpcas"
+  ],
+  "license": "MIT",
+  "homepage": "https://www.iwannamaybe.com",
+  "support": {
+    "issues": "https://github.com/iwannamaybe/phpcas/issues",
+    "source": "https://github.com/iwannamaybe/phpcas"
+  },
+  "authors": [
+    {
+      "name": "YangHaiquan",
+      "email": "iwannamaybe@vip.qq.com"
+    }
+  ],
+  "require": {
+    "php": ">=5.5.0"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "~5.5"
+  },
+  "autoload": {
+    "psr-4": {
+      "Iwannamaybe\\PhpCas\\": "src/"
+    },
+    "files": [
+      "src/helpers.php"
+    ]
+  },
+  "extra": {
+    "branch-alias": {
+      "dev-master": "1.0.*"
+    },
+    "laravel": {
+      "providers": [
+        "Iwannamaybe\\PhpCas\\PhpCasServiceProvider"
+      ],
+      "aliases": {
+        "PhpCas": "Iwannamaybe\\PhpCas\\PhpCasFacade"
+      }
+    }
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
