@@ -18,8 +18,11 @@ class PhpCasServiceProvider extends ServiceProvider
 	 */
 	public function register()
 	{
+		$this->app->singleton('phpcas.client', function ($app) {
+			return new Client($app['config'],$app['url'],$app['request']);
+		});
 		$this->app->singleton('phpcas', function ($app) {
-			return new Cas();
+			return new Cas($app);
 		});
 		$this->app->alias('phpcas', Cas::class);
 	}
