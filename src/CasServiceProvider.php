@@ -9,7 +9,7 @@ namespace Iwannamaybe\PhpCas;
 
 use Illuminate\Support\ServiceProvider;
 
-class PhpCasServiceProvider extends ServiceProvider
+class CasServiceProvider extends ServiceProvider
 {
 	/**
 	 * Register the services providers.
@@ -18,10 +18,10 @@ class PhpCasServiceProvider extends ServiceProvider
 	 */
 	public function register()
 	{
-		$this->app->singleton(PhpCas::class, function ($app) {
-			return new PhpCas();
+		$this->app->singleton('cas', function ($app) {
+			return new Cas();
 		});
-		$this->app->alias('phpCas', PhpCas::class);
+		$this->app->alias('cas', Cas::class);
 	}
 
 	/**
@@ -31,6 +31,6 @@ class PhpCasServiceProvider extends ServiceProvider
 	 */
 	public function provides()
 	{
-		return ['phpCas'];
+		return ['cas'];
 	}
 }

@@ -8,7 +8,7 @@
 namespace Iwannamaybe\PhpCas;
 
 
-class PhpCas
+class Cas
 {
 	public function testCas()
 	{

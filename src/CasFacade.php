@@ -10,9 +10,9 @@ namespace Iwannamaybe\PhpCas;
 use Illuminate\Support\Facades\Facade;
 
 /**
- * @see \Iwannamaybe\PhpCas\PhpCas
+ * @see \Iwannamaybe\PhpCas\Cas
  */
-class PhpCasFacade extends Facade
+class CasFacade extends Facade
 {
 	/**
 	 * Get the registered name of the component.
@@ -21,6 +21,6 @@ class PhpCasFacade extends Facade
 	 */
 	protected static function getFacadeAccessor()
 	{
-		return 'phpCas';
+		return 'cas';
 	}
 }

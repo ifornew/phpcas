@@ -39,10 +39,10 @@
     },
     "laravel": {
       "providers": [
-        "Iwannamaybe\\PhpCas\\PhpCasServiceProvider"
+        "Iwannamaybe\\PhpCas\\CasServiceProvider"
       ],
       "aliases": {
-        "PhpCas": "Iwannamaybe\\PhpCas\\PhpCasFacade"
+        "PhpCas": "Iwannamaybe\\PhpCas\\CasFacade"
       }
     }
   },
