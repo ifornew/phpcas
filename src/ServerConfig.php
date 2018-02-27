@@ -59,11 +59,6 @@ class ServerConfig
 
 	public $casBaseServerUri;
 
-	//TODO:UDF代理
-	public $casUdfProxy;
-
-	public $casUdfProxyIp;
-
 	public $sessionCasKey;
 
 	public $sessionAuthChecked;

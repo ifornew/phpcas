@@ -172,48 +172,46 @@ class Client
 	 */
 	private function initConfigs()
 	{
-		$casServerConfig = new ServerConfig();
-		//TODO:UDF代理
-		$casServerConfig->casUdfProxy   = boolval($this->_Config->get('cas.cas_udf_proxy', false));
-		$casServerConfig->casUdfProxyIp = $this->_Config->get('cas.cas_udf_proxy_ip', '127.0.0.1');
+		$serverConfig = new ServerConfig();
+		$serverConfig->casFake              = boolval($this->_Config->get('cas.cas_fake', false));
+		$serverConfig->casFakeUserId        = intval($this->_Config->get('cas.cas_fake_user_id', 1));
 
-		$casServerConfig->casFake              = boolval($this->_Config->get('cas.cas_fake', false));
-		$casServerConfig->casFakeUserId        = intval($this->_Config->get('cas.cas_fake_user_id', 1));
+		$serverConfig->casVersion           = $this->_Config->get('cas.cas_version', '2.0');
+		$serverConfig->casHostName          = $this->initCasHost();
+		$serverConfig->casPort              = intval($this->_Config->get('cas.cas_port', 443));
+		$serverConfig->casBaseServerUri     = $this->initBaseServerUri($serverConfig->casHostName, $serverConfig->casPort);
+		$serverConfig->casChannel           = $this->_Config->get('cas.cas_channel');
+		$serverConfig->casUri               = $this->_Config->get('cas.cas_uri');
+		$serverConfig->casLoginUri          = $this->_Config->get('cas.cas_login_uri');
+		$serverConfig->casLogoutUri         = $this->_Config->get('cas.cas_logout_uri');
+		$serverConfig->casRegisterUri       = $this->_Config->get('cas.cas_register_uri');
+		$serverConfig->casValidateUri          = $this->initValidateUri($serverConfig->casVersion);
+		$serverConfig->casProxyValidateUri     = $this->initProxyValidateUri($serverConfig->casVersion);
+		$serverConfig->casSamlValidateUri      = $this->initSamlValidateUri($serverConfig->casVersion);
+		$serverConfig->casCert              = $this->_Config->get('cas.cas_cert');
+		$serverConfig->casCertValidate      = boolval($this->_Config->get('cas.cas_cert_validate', false));
+		$serverConfig->casCertCnValidate    = boolval($this->_Config->get('cas.cas_cert_cn_validate', false));
+		$serverConfig->casLang              = $this->_Config->get('app.locale');
+		$serverConfig->sessionCasKey        = $this->_Config->get('cas.cas_session_key');
+		$serverConfig->sessionAuthChecked   = "{$serverConfig->sessionCasKey}.authChecked";
+		$serverConfig->sessionUserKey       = "{$serverConfig->sessionCasKey}.user";
+		$serverConfig->sessionAttributesKey = "{$serverConfig->sessionCasKey}.attributes";
+		$serverConfig->sessionPgtKey        = "{$serverConfig->sessionCasKey}.pgt";
+		$serverConfig->sessionProxiesKey    = "{$serverConfig->sessionCasKey}.proxies";
 
-		$casServerConfig->casVersion           = $this->_Config->get('cas.cas_version', '2.0');
-		$casServerConfig->casHostName          = $this->udfProxyCasHost();
-		$casServerConfig->casPort              = intval($this->_Config->get('cas.cas_port', 443));
-		$casServerConfig->casBaseServerUri     = $this->initBaseServerUri($casServerConfig->casHostName, $casServerConfig->casPort);
-		$casServerConfig->casChannel           = $this->_Config->get('cas.cas_channel');
-		$casServerConfig->casUri               = $this->_Config->get('cas.cas_uri');
-		$casServerConfig->casLoginUri          = $this->_Config->get('cas.cas_login_uri');
-		$casServerConfig->casLogoutUri         = $this->_Config->get('cas.cas_logout_uri');
-		$casServerConfig->casRegisterUri       = $this->_Config->get('cas.cas_register_uri');
-		$casServerConfig->casValidateUri          = $this->initValidateUri($casServerConfig->casVersion);
-		$casServerConfig->casProxyValidateUri     = $this->initProxyValidateUri($casServerConfig->casVersion);
-		$casServerConfig->casSamlValidateUri      = $this->initSamlValidateUri($casServerConfig->casVersion);
-		$casServerConfig->casCert              = $this->_Config->get('cas.cas_cert');
-		$casServerConfig->casCertValidate      = boolval($this->_Config->get('cas.cas_cert_validate', false));
-		$casServerConfig->casCertCnValidate    = boolval($this->_Config->get('cas.cas_cert_cn_validate', false));
-		$casServerConfig->casLang              = $this->_Config->get('app.locale');
-		$casServerConfig->sessionCasKey        = $this->_Config->get('cas.cas_session_key');
-		$casServerConfig->sessionAuthChecked   = "{$casServerConfig->sessionCasKey}.authChecked";
-		$casServerConfig->sessionUserKey       = "{$casServerConfig->sessionCasKey}.user";
-		$casServerConfig->sessionAttributesKey = "{$casServerConfig->sessionCasKey}.attributes";
-		$casServerConfig->sessionPgtKey        = "{$casServerConfig->sessionCasKey}.pgt";
-		$casServerConfig->sessionProxiesKey    = "{$casServerConfig->sessionCasKey}.proxies";
-
-		$this::$_ServerConfig = $casServerConfig;
+		$this::$_ServerConfig = $serverConfig;
 	}
 
 	/**
 	 * Get the phpcas hostname by UDF proxy
 	 * @return string
 	 */
-	protected function udfProxyCasHost()
+	protected function initCasHost()
 	{
-		if ($this::$_ServerConfig->casUdfProxy && $this->_Request->ip() == $this::$_ServerConfig->casUdfProxyIp) {
-			return $this::$_ServerConfig->casUdfProxyIp;
+		$cas_udf_proxy   = boolval($this->_Config->get('cas.cas_udf_proxy', false));
+		$cas_udf_proxy_ip = $this->_Config->get('cas.cas_udf_proxy_ip', '127.0.0.1');
+		if ($cas_udf_proxy && $this->_Request->ip() == $cas_udf_proxy_ip) {
+			return $cas_udf_proxy_ip;
 		}
 		return $this->_Config->get('cas.cas_hostname');
 	}

@@ -11,12 +11,14 @@ namespace Iwannamaybe\PhpCas;
 class Cas
 {
 	/**
-	 * @var Client
+	 * @var Client $casClient
 	 */
 	protected $casClient;
 
 	/**
 	 * Cas constructor.
+	 *
+	 * @param Client $client
 	 */
 	public function __construct(Client $client)
 	{
