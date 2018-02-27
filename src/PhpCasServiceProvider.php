@@ -12,6 +12,22 @@ use Illuminate\Support\ServiceProvider;
 class PhpCasServiceProvider extends ServiceProvider
 {
 	/**
+	 * Bootstrap the application events.
+	 *
+	 * @return void
+	 */
+	public function boot()
+	{
+		$configPath = __DIR__ . '/../config/phpcas.php';
+		if (function_exists('config_path')) {
+			$publishPath = config_path('phpcas.php');
+		} else {
+			$publishPath = base_path('config/phpcas.php');
+		}
+		$this->publishes([$configPath => $publishPath], 'config');
+	}
+
+	/**
 	 * Register the services providers.
 	 *
 	 * @return void
@@ -19,10 +35,10 @@ class PhpCasServiceProvider extends ServiceProvider
 	public function register()
 	{
 		$this->app->singleton('phpcas.client', function ($app) {
-			return new Client($app['config'],$app['url'],$app['request']);
+			return new Client($app['config'],$app['url'],$app['request'],$app['session'],$app['log'],$app['redirect']);
 		});
 		$this->app->singleton('phpcas', function ($app) {
-			return new Cas($app);
+			return new Cas($app['phpcas.client']);
 		});
 		$this->app->alias('phpcas', Cas::class);
 	}

@@ -5,7 +5,6 @@
  * Date: 2018/2/24
  * Time: 15:18
  */
-
 namespace Iwannamaybe\PhpCas;
 
 
@@ -19,9 +18,9 @@ class Cas
 	/**
 	 * Cas constructor.
 	 */
-	public function __construct($app)
+	public function __construct(Client $client)
 	{
-		$this->casClient = $app['phpcas.client'];
+		$this->casClient = $client;
 	}
 
 	/**
@@ -81,15 +80,5 @@ class Cas
 			//$user = User::firstOrNew(['mobile' => Cas::getUser(), 'password' => bcrypt(123456)]);
 			Auth::onceUsingId($user->id);
 		}
-	}
-
-	/**
-	 * phpcas loginout
-	 *
-	 * @param string $redirect phpcas logout redirect url
-	 */
-	public function logout($redirect = null)
-	{
-		$this->casClient->logout($redirect);
 	}
 }
