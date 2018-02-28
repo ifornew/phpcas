@@ -31,7 +31,7 @@ class AuthenticationException extends RuntimeException implements CasException
 	public function __construct($client, $failure, $cas_url, $no_response, $bad_response = false, $cas_response = '', $err_code = null, $err_msg = '')
 	{
 		$messages   = array();
-		$lang       = $client->getLangObj();
+		$lang       = $client->getTranslator();
 		$messages[] = 'CAS URL: ' . $cas_url;
 		$messages[] = 'Authentication failure: ' . $failure;
 		if ($no_response) {

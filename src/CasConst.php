@@ -15,6 +15,12 @@ class CasConst
 	const PGTIOU = 1;
 
 	/**
+	 * Constants used for determining rebroadcast node type.
+	 */
+	const HOSTNAME = 0;
+	const IP = 1;
+
+	/**
 	 * SAML protocol
 	 */
 	const SAML_VERSION_1_1 = 'S1';

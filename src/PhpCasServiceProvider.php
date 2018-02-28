@@ -34,8 +34,11 @@ class PhpCasServiceProvider extends ServiceProvider
 	 */
 	public function register()
 	{
+		$configPath = __DIR__ . '/../config/phpcas.php';
+		$this->mergeConfigFrom($configPath, 'phpcas');
+
 		$this->app->singleton('phpcas.client', function ($app) {
-			return new Client($app['config'],$app['url'],$app['request'],$app['session.store'],$app['log'],$app['redirect']);
+			return new Client($app['config'],$app['url'],$app['request'],$app['log'],$app['redirect']);
 		});
 		$this->app->singleton('phpcas', function ($app) {
 			return new Cas($app['phpcas.client']);

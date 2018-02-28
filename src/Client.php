@@ -14,15 +14,15 @@ use DOMXPath;
 use Illuminate\Contracts\Logging\Log;
 use Illuminate\Contracts\Routing\UrlGenerator;
 use Illuminate\Config\Repository;
-use Illuminate\Contracts\Session\Session;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Redirector;
+use Illuminate\Support\Facades\Auth;
 use Iwannamaybe\PhpCas\Exceptions\AuthenticationException;
 use Iwannamaybe\PhpCas\Exceptions\CasInvalidArgumentException;
-use Iwannamaybe\PhpCas\Exceptions\OutOfSequenceBeforeAuthenticationCallException;
-use Iwannamaybe\PhpCas\Exceptions\OutOfSequenceException;
 use Iwannamaybe\PhpCas\ProxyChain\ProxyChainAllowedList;
+use Iwannamaybe\PhpCas\Requests\CurlMultiRequest;
 use Iwannamaybe\PhpCas\Requests\CurlRequest;
+use Iwannamaybe\PhpCas\Requests\MultiRequestInterface;
 use Symfony\Component\Translation\Loader\ArrayLoader;
 use Symfony\Component\Translation\Translator;
 
@@ -42,11 +42,6 @@ class Client
 	 * @var Request $_Request request manager
 	 */
 	protected $_Request;
-
-	/**
-	 * @var Session $_Session session manager
-	 */
-	protected $_Session;
 
 	/**
 	 * @var Redirector $_Redirect
@@ -87,39 +82,9 @@ class Client
 	private $allowedProxyChains;
 
 	/**
-	 * @var bool $canChangeSessionId A variable to whether phpcas will use its own session handling. Default = true
-	 */
-	private $canChangeSessionId = false;
-
-	/**
-	 * @var callback $_attributeParserCallbackFunction ;
-	 */
-	private $AttributeParserCallbackFunction = null;
-
-	/**
-	 * @var array $_attributeParserCallbackArgs ;
-	 */
-	private $AttributeParserCallbackArgs = [];
-
-	/** @var callback $postAuthenticateCallbackFunction ;
-	 */
-	private $postAuthenticateCallbackFunction = null;
-
-	/**
-	 * @var array $postAuthenticateCallbackArgs ;
-	 */
-	private $postAuthenticateCallbackArgs = [];
-
-	/**
 	 * @var array $_proxies This array will store a list of proxies in front of this application. This property will only be populated if this script is being proxied rather than accessed directly.It is set in CAS_Client::validateCAS20() and can be read by Client::getProxies()
 	 */
 	private $proxies = array();
-
-	/**
-	 * a boolean to know if the CAS client is running in callback mode. Written by Client::setCallBackMode(), read by Client::isCallbackMode().
-	 * @hideinitializer
-	 */
-	private $callbackMode = false;
 
 	/**
 	 * @var bool $rebroadcast whether to rebroadcast pgtIou/pgtId and logoutRequest
@@ -131,16 +96,19 @@ class Client
 	private $rebroadcastNodes = [];
 
 	/**
+	 * @param array $rebroadcastHeaders An array to store extra rebroadcast curl options.
+	 */
+	private $rebroadcastHeaders = array();
+
+	/**
 	 * @var string $pgt the Proxy Grnting Ticket given by the CAS server (empty otherwise). Written by CAS_Client::_setPGT(), read by Client::getPGT() and Client::hasPGT()
 	 */
 	private $pgt = '';
 
-	private $authenticationCaller;
-
 	/**
-	 * @var boolean $_clearTicketsFromUrl If true, phpCAS will clear session tickets from the URL after a successful authentication.
+	 * @var boolean $clearTicketFromUri If true, phpCAS will clear session tickets from the URL after a successful authentication.
 	 */
-	private $clearTicketsFromUrl = true;
+	private $clearTicketFromUri = true;
 
 	/**
 	 * @var array $curlOptions An array to store extra curl options.
@@ -148,23 +116,24 @@ class Client
 	private $curlOptions = [];
 
 	/**
-	 * @var string $_requestImplementation
-	 * The class to instantiate for making web requests in readUrl().
-	 * The class specified must implement the RequestInterface.
-	 * By default CurlRequest is used, but this may be overridden to
-	 * supply alternate request mechanisms for testing.
+	 * @var string $requestImplementation The class to instantiate for making web requests in readUrl(). The class specified must implement the RequestInterface. By default CurlRequest is used, but this may be overridden to supply alternate request mechanisms for testing.
 	 */
 	private $requestImplementation = CurlRequest::class;
 
-	public function __construct(Repository $config, UrlGenerator $url, Request $request, Session $session, Log $logger, Redirector $redirect)
+	/**
+	 * @var string $multiRequestImplementation The class to instantiate for making web requests in readUrl(). The class specified must implement the RequestInterface. By default CurlRequest is used, but this may be overridden to supply alternate request mechanisms for testing.
+	 */
+	private $multiRequestImplementation = CurlMultiRequest::class;
+
+	public function __construct(Repository $config, UrlGenerator $url, Request $request, Log $logger, Redirector $redirect)
 	{
 		$this->_Config   = $config;
 		$this->_Url      = $url;
 		$this->_Request  = $request;
-		$this->_Session  = $session;
 		$this->_Logger   = $logger;
 		$this->_Redirect = $redirect;
 		$this->initConfigs();
+		$this->initTicket();
 	}
 
 	/**
@@ -172,30 +141,27 @@ class Client
 	 */
 	private function initConfigs()
 	{
-		$serverConfig = new ServerConfig();
-		$serverConfig->casFake              = boolval($this->_Config->get('cas.cas_fake', false));
-		$serverConfig->casFakeUserId        = intval($this->_Config->get('cas.cas_fake_user_id', 1));
+		$serverConfig                = new ServerConfig();
+		$serverConfig->casFake       = boolval($this->_Config->get('phpcas.cas_fake', false));
+		$serverConfig->casFakeUserId = intval($this->_Config->get('phpcas.cas_fake_user_id', 1));
 
-		$serverConfig->casVersion           = $this->_Config->get('cas.cas_version', '2.0');
+		$serverConfig->casVersion           = $this->_Config->get('phpcas.cas_version', '2.0');
 		$serverConfig->casHostName          = $this->initCasHost();
-		$serverConfig->casPort              = intval($this->_Config->get('cas.cas_port', 443));
+		$serverConfig->casPort              = intval($this->_Config->get('phpcas.cas_port', 443));
 		$serverConfig->casBaseServerUri     = $this->initBaseServerUri($serverConfig->casHostName, $serverConfig->casPort);
-		$serverConfig->casChannel           = $this->_Config->get('cas.cas_channel');
-		$serverConfig->casUri               = $this->_Config->get('cas.cas_uri');
-		$serverConfig->casLoginUri          = $this->_Config->get('cas.cas_login_uri');
-		$serverConfig->casLogoutUri         = $this->_Config->get('cas.cas_logout_uri');
-		$serverConfig->casRegisterUri       = $this->_Config->get('cas.cas_register_uri');
-		$serverConfig->casValidateUri          = $this->initValidateUri($serverConfig->casVersion);
-		$serverConfig->casProxyValidateUri     = $this->initProxyValidateUri($serverConfig->casVersion);
-		$serverConfig->casSamlValidateUri      = $this->initSamlValidateUri($serverConfig->casVersion);
-		$serverConfig->casCert              = $this->_Config->get('cas.cas_cert');
-		$serverConfig->casCertValidate      = boolval($this->_Config->get('cas.cas_cert_validate', false));
-		$serverConfig->casCertCnValidate    = boolval($this->_Config->get('cas.cas_cert_cn_validate', false));
+		$serverConfig->casChannel           = $this->_Config->get('phpcas.cas_channel');
+		$serverConfig->casUri               = $this->_Config->get('phpcas.cas_uri');
+		$serverConfig->casLoginUri          = $this->_Config->get('phpcas.cas_login_uri');
+		$serverConfig->casLogoutUri         = $this->_Config->get('phpcas.cas_logout_uri');
+		$serverConfig->casRegisterUri       = $this->_Config->get('phpcas.cas_register_uri');
+		$serverConfig->casValidateUri       = $this->initValidateUri($serverConfig->casVersion);
+		$serverConfig->casProxyValidateUri  = $this->initProxyValidateUri($serverConfig->casVersion);
+		$serverConfig->casSamlValidateUri   = $this->initSamlValidateUri($serverConfig->casVersion);
+		$serverConfig->casCert              = $this->_Config->get('phpcas.cas_cert');
+		$serverConfig->casCertValidate      = boolval($this->_Config->get('phpcas.cas_cert_validate', false));
+		$serverConfig->casCertCnValidate    = boolval($this->_Config->get('phpcas.cas_cert_cn_validate', false));
 		$serverConfig->casLang              = $this->_Config->get('app.locale');
-		$serverConfig->sessionCasKey        = $this->_Config->get('cas.cas_session_key');
-		$serverConfig->sessionAuthChecked   = "{$serverConfig->sessionCasKey}.authChecked";
-		$serverConfig->sessionUserKey       = "{$serverConfig->sessionCasKey}.user";
-		$serverConfig->sessionAttributesKey = "{$serverConfig->sessionCasKey}.attributes";
+		$serverConfig->sessionCasKey        = $this->_Config->get('phpcas.cas_session_key');
 		$serverConfig->sessionPgtKey        = "{$serverConfig->sessionCasKey}.pgt";
 		$serverConfig->sessionProxiesKey    = "{$serverConfig->sessionCasKey}.proxies";
 
@@ -208,12 +174,12 @@ class Client
 	 */
 	protected function initCasHost()
 	{
-		$cas_udf_proxy   = boolval($this->_Config->get('cas.cas_udf_proxy', false));
-		$cas_udf_proxy_ip = $this->_Config->get('cas.cas_udf_proxy_ip', '127.0.0.1');
+		$cas_udf_proxy    = boolval($this->_Config->get('phpcas.cas_udf_proxy', false));
+		$cas_udf_proxy_ip = $this->_Config->get('phpcas.cas_udf_proxy_ip', '127.0.0.1');
 		if ($cas_udf_proxy && $this->_Request->ip() == $cas_udf_proxy_ip) {
 			return $cas_udf_proxy_ip;
 		}
-		return $this->_Config->get('cas.cas_hostname');
+		return $this->_Config->get('phpcas.cas_hostname');
 	}
 
 	/**
@@ -235,6 +201,18 @@ class Client
 		}
 	}
 
+	private function initTicket()
+	{
+		$ticket = $this->_Request->get('ticket', null);
+		if (preg_match('/^[SP]T-/', $ticket)) {
+			$this->_Logger->info("Ticket `{$ticket}` found");
+			$this->setTicket($ticket);
+		} elseif (!empty($ticket)) {
+			//ill-formed ticket, halt
+			$this->_Logger->error('ill-formed ticket found in the URL (ticket=`' . htmlentities($ticket) . '\')');
+		}
+	}
+
 	/**
 	 * init cas validate uri
 	 *
@@ -246,13 +224,13 @@ class Client
 	{
 		switch ($casVersion) {
 			case '1.0':
-				return 'validate';
+				return '/cas/validate';
 				break;
 			case '2.0':
-				return 'serviceValidate';
+				return '/cas/serviceValidate';
 				break;
 			case '3.0':
-				return 'p3/serviceValidate';
+				return '/cas/p3/serviceValidate';
 				break;
 			default:
 				throw new CasInvalidArgumentException('not support version');
@@ -295,7 +273,7 @@ class Client
 		if ($casVersion == CasConst::SAML_VERSION_1_1) {
 			return 'samlValidate';
 		} else {
-			throw new CasInvalidArgumentException('not support version');
+			return '';
 		}
 	}
 
@@ -311,7 +289,7 @@ class Client
 	public function getLoginUri($redirect = null, $gateway = false, $renew = false)
 	{
 		$params = [
-			'service' => $redirect == null ? $this->getRequestUriWithoutTicket() : $redirect,
+			'service' => $redirect == null ? $this->getRequestUri() : $redirect,
 			'channel' => $this::$_ServerConfig->casChannel
 		];
 		if ($gateway) {
@@ -369,7 +347,7 @@ class Client
 	 *
 	 * @return void
 	 */
-	public function setTicket($ticket)
+	protected function setTicket($ticket)
 	{
 		$this->ticket = $ticket;
 	}
@@ -390,27 +368,6 @@ class Client
 	public function getServerVersion()
 	{
 		return $this::$_ServerConfig->casVersion;
-	}
-
-	/**
-	 * Set a parameter whether to allow phpCas to change session_id
-	 *
-	 * @param bool $allowed allow phpCas to change session_id
-	 *
-	 * @return void
-	 */
-	public function setCanChangeSessionId($allowed)
-	{
-		$this->canChangeSessionId = $allowed;
-	}
-
-	/**
-	 * Get whether phpCas is allowed to change session_id
-	 * @return bool
-	 */
-	public function getCanChangeSessionId()
-	{
-		return $this->canChangeSessionId;
 	}
 
 	/**
@@ -436,7 +393,7 @@ class Client
 		$this->proxies = $proxies;
 		if (!empty($proxies)) {
 			// For proxy-authenticated requests people are not viewing the URL directly since the client is another application making a web-service call. Because of this, stripping the ticket from the URL is unnecessary and causes another web-service request to be performed. Additionally, if session handling on either the client or the server malfunctions then the subsequent request will not complete successfully.
-			$this->setNoClearTicketsFromUrl();
+			$this->setClearTicketFromUri();
 		}
 	}
 
@@ -451,22 +408,29 @@ class Client
 	}
 
 	/**
+	 * Configure the client to not send redirect headers and call exit() on authentication success. The normal redirect is used to remove the service ticket from the client's URL, but for running unit tests we need to continue without exiting. Needed for testing authentication
+	 *
+	 * @param bool $value
+	 *
+	 * @return void
+	 */
+	public function setClearTicketFromUri($value = true)
+	{
+		$this->clearTicketFromUri = $value;
+	}
+
+	public function getClearTicketFromUri()
+	{
+		return $this->clearTicketFromUri;
+	}
+
+	/**
 	 * This method returns the Proxy Granting Ticket given by the CAS server.
 	 * @return string the Proxy Granting Ticket.
 	 */
 	private function getPGT()
 	{
 		return $this->pgt;
-	}
-
-	/**
-	 * Configure the client to not send redirect headers and call exit() on authentication success. The normal redirect is used to remove the service ticket from the client's URL, but for running unit tests we need to continue without exiting.
-	 * Needed for testing authentication
-	 * @return void
-	 */
-	public function setNoClearTicketsFromUrl()
-	{
-		$this->clearTicketsFromUrl = false;
 	}
 
 	/**
@@ -488,8 +452,6 @@ class Client
 	 */
 	public function getUser()
 	{
-		// Sequence validation
-		$this->ensureAuthenticationCallSuccessful();
 		return $this->user;
 	}
 
@@ -502,21 +464,6 @@ class Client
 	{
 		$this->attributes = $attributes;
 	}
-
-	/**
-	 * Set a callback function to be run when parsing CAS attributes. The callback function will be passed a XMLNode as its first parameter,followed by any $additionalArgs you pass.
-	 *
-	 * @param string $function       callback function to call
-	 * @param array  $additionalArgs optional array of arguments
-	 *
-	 * @return void
-	 */
-	public function setCasAttributeParserCallback($function, array $additionalArgs = array())
-	{
-		$this->AttributeParserCallbackFunction = $function;
-		$this->AttributeParserCallbackArgs     = $additionalArgs;
-	}
-
 
 	/**
 	 * This method stores the Proxy Granting Ticket.
@@ -540,47 +487,6 @@ class Client
 	}
 
 	/**
-	 * This method is called to be sure that the user is authenticated. When not authenticated, halt by redirecting to the CAS server; otherwise return true.
-	 * @return true when the user is authenticated; otherwise halt.
-	 */
-	public function forceAuthentication()
-	{
-		if ($this::$_ServerConfig->casFake) {
-			return true;
-		} elseif ($this->isAuthenticated()) {
-			// the user is authenticated, nothing to be done.
-			$this->_Logger->info('no need to authenticate');
-			return true;
-		} else {
-			// the user is not authenticated, redirect to the CAS server
-			if ($this->_Session->exists(static::$_ServerConfig->sessionAuthChecked)) {
-				$this->_Session->forget(static::$_ServerConfig->sessionAuthChecked);
-			}
-			$this->redirectToCas(false);
-			// never reached
-			return false;
-		}
-	}
-
-	/**
-	 * This method is used to redirect the client to the CAS server. It is used by CAS_Client::forceAuthentication() and Client::checkAuthentication().
-	 *
-	 * @param bool $gateway true to check authentication, false to force it
-	 * @param bool $renew   true to force the authentication with the CAS server
-	 *
-	 * @return void
-	 */
-	public function redirectToCas($gateway = false, $renew = false)
-	{
-		$cas_url = $this->getLoginUri(null, $gateway, $renew);
-		$this->_Session->save();
-		$this->_Logger->info("Redirect to : " . $cas_url);
-		$this->_Redirect->to($cas_url);
-		//TODO:抛出异常结束程序
-		//throw new GracefullTerminationException();
-	}
-
-	/**
 	 * check if the user is authenticated (previously or by tickets given in the uri)
 	 *
 	 * @param bool $renew true to force the authentication with the CAS server
@@ -589,103 +495,46 @@ class Client
 	 */
 	public function isAuthenticated($renew = false)
 	{
-		$res          = false;
-		$validate_url = '';
-		$logoutTicket = '';
-		if ($this::$_ServerConfig->casFake) {
-			$res = true;
-		} elseif ($this->wasPreviouslyAuthenticated()) {
-			if ($this->hasTicket()) {
-				// User has a additional ticket but was already authenticated
-				$this->_Logger->info('ticket was present and will be discarded, use renewAuthenticate()');
-				if ($this->clearTicketsFromUrl) {
-					$this->_Logger->info("Prepare redirect to : {$this->getRequestUriWithoutTicket()}");
-					$this->_Session->save();
-					$this->_Redirect->to($this->getRequestUriWithoutTicket());
-					$res = true;
-				} else {
-					$this->_Logger->info('Already authenticated, but skipping ticket clearing since setNoClearTicketsFromUrl() was used.');
-					$res = true;
-				}
-			} else {
-				// the user has already (previously during the session) been authenticated, nothing to be done.
-				$this->_Logger->info('user was already authenticated, no need to look for tickets');
-				$res = true;
-			}
-			// Mark the auth-check as complete to allow post-authentication callbacks to make use of phpCAS::getUser() and similar methods
-			$this->markAuthenticationCall($res);
-		} else {
-			if ($this->hasTicket()) {
-				switch ($this->getServerVersion()) {
-					case '1.0':
-						// if a Service Ticket was given, validate it
-						$this->_Logger->info("CAS 1.0 ticket '{$this->getTicket()}' is present");
-						$this->validateCAS10($validate_url, $text_response, $tree_response, $renew); // if it fails, it halts
-						$this->_Logger->info("CAS 1.0 ticket '{$this->getTicket()}' was validated");
-						$this->_Session->put($this::$_ServerConfig->sessionUserKey, $this->getUser());
-						$res          = true;
-						$logoutTicket = $this->getTicket();
-						break;
-					case '2.0':
-					case '3.0':
-						// if a Proxy Ticket was given, validate it
-						$this->_Logger->info("CAS {$this->getServerVersion()} ticket `{$this->getTicket()}` is present");
-						$this->validateCAS20($validate_url, $text_response, $tree_response, $renew); // note: if it fails, it halts
-						$this->_Logger->info("CAS {$this->getServerVersion()} ticket `{$this->getTicket()}` was validated");
-						if ($this->isProxy()) {
-							$this->validatePGT($validate_url, $text_response, $tree_response); // idem
-							$this->_Logger->info("PGT `{$this->getPGT()}` was validated");
-							$this->_Session->put($this::$_ServerConfig->sessionPgtKey, $this->getPGT());
-						}
-						$this->_Session->put($this::$_ServerConfig->sessionUserKey, $this->getUser());
-						if (!empty($this->attributes)) {
-							$this->_Session->put($this::$_ServerConfig->sessionAttributesKey, $this->attributes);
-						}
-						if (!empty($proxies = $this->getProxies())) {
-							$this->_Session->put($this::$_ServerConfig->sessionProxiesKey, $proxies);
-						}
-						$res          = true;
-						$logoutTicket = $this->getTicket();
-						break;
-					case 'S1':
-						// if we have a SAML ticket, validate it.
-						$this->_Logger->info("SAML 1.1 ticket `{$this->getTicket()}` is present");
-						$this->validateSA($validate_url, $text_response, $tree_response, $renew); // if it fails, it halts
-						$this->_Logger->info("SAML 1.1 ticket `{$this->getTicket()}` was validated");
-						$this->_Session->put($this::$_ServerConfig->sessionUserKey, $this->getUser());
-						$this->_Session->put($this::$_ServerConfig->sessionAttributesKey, $this->attributes);
-						$res          = true;
-						$logoutTicket = $this->getTicket();
-						break;
-					default:
-						$this->_Logger->info('Protocoll error');
-						break;
-				}
-			} else {
-				// no ticket given, not authenticated
-				$this->_Logger->info('no ticket found');
-			}
-
-			// Mark the auth-check as complete to allow post-authentication callbacks to make use of phpCAS::getUser() and similar methods
-			$this->markAuthenticationCall($res);
-
-			if ($res) {
-				// call the post-authenticate callback if registered.
-				if ($this->postAuthenticateCallbackFunction) {
-					$args = $this->postAuthenticateCallbackArgs;
-					array_unshift($args, $logoutTicket);
-					call_user_func_array($this->postAuthenticateCallbackFunction, $args);
-				}
-
-				// if called with a ticket parameter, we need to redirect to the app without the ticket so that CAS-ification is transparent to the browser (for later POSTS) most of the checks and errors should have been made now, so we're safe for redirect without masking error messages. remove the ticket as a security precaution to prevent a ticket in the HTTP_REFERRER
-				if ($this->clearTicketsFromUrl) {
-					$this->_Logger->info('Prepare redirect to : ' . $this->getRequestUriWithoutTicket());
-					$this->_Session->save();
-					$this->_Redirect->to($this->getRequestUriWithoutTicket());
-				}
-			}
+		if($this::$_ServerConfig->casFake){
+			$this->setUser($this::$_ServerConfig->casFakeUserId);
+			return true;
 		}
-		return $res;
+		switch ($this->getServerVersion()) {
+			case '1.0':
+				// if a Service Ticket was given, validate it
+				$this->_Logger->info("CAS 1.0 ticket '{$this->getTicket()}' is present");
+				$this->validateCAS10($validate_url, $text_response, $renew); // if it fails, it halts
+				$this->_Logger->info("CAS 1.0 ticket '{$this->getTicket()}' was validated");
+				return true;
+				break;
+			case '2.0':
+			case '3.0':
+				// if a Proxy Ticket was given, validate it
+				$this->_Logger->info("CAS {$this->getServerVersion()} ticket `{$this->getTicket()}` is present");
+				$this->validateCAS20($validate_url, $text_response, $tree_response, $renew); // note: if it fails, it halts
+				$this->_Logger->info("CAS {$this->getServerVersion()} ticket `{$this->getTicket()}` was validated");
+				if ($this->isProxy()) {
+					$this->validatePGT($validate_url, $text_response, $tree_response); // idem
+					$this->_Logger->info("PGT `{$this->getPGT()}` was validated");
+					$this->_Request->session()->put($this::$_ServerConfig->sessionPgtKey, $this->getPGT());
+				}
+				if (!empty($proxies = $this->getProxies())) {
+					$this->_Request->session()->put($this::$_ServerConfig->sessionProxiesKey, $proxies);
+				}
+				return true;
+				break;
+			case 'S1':
+				// if we have a SAML ticket, validate it.
+				$this->_Logger->info("SAML 1.1 ticket `{$this->getTicket()}` is present");
+				$this->validateSA($validate_url, $text_response, $tree_response, $renew); // if it fails, it halts
+				$this->_Logger->info("SAML 1.1 ticket `{$this->getTicket()}` was validated");
+				return true;
+				break;
+			default:
+				$this->_Logger->info('Protocoll error');
+				break;
+		}
+		return false;
 	}
 
 	/**
@@ -737,210 +586,6 @@ class Client
 			}
 		}
 		return true;
-	}
-
-	/**
-	 * Mark the caller of authentication. This will help client integraters determine problems with their code flow if they call a function such as getUser() before authentication has occurred.
-	 *
-	 * @param bool $auth True if authentication was successful, false otherwise.
-	 *
-	 * @return void
-	 */
-	public function markAuthenticationCall($auth)
-	{
-		// store where the authentication has been checked and the result
-		$dbg                        = debug_backtrace();
-		$this->authenticationCaller = array(
-			'file'   => $dbg[1]['file'],
-			'line'   => $dbg[1]['line'],
-			'method' => $dbg[1]['class'] . '::' . $dbg[1]['function'],
-			'result' => (boolean)$auth
-		);
-	}
-
-	/**
-	 * This method returns true when the CAs client is running i callback mode,false otherwise.
-	 * @return boolean.
-	 */
-	private function isCallbackMode()
-	{
-		return $this->callbackMode;
-	}
-
-	/**
-	 * This method tells if the current session is authenticated.
-	 * @return true if authenticated based soley on $_SESSION variable
-	 */
-	public function isSessionAuthenticated()
-	{
-		return $this->_Session->has($this::$_ServerConfig->sessionUserKey);
-	}
-
-	/**
-	 * This method tells if the user has already been (previously) authenticated by looking into the session variables.
-	 * @note This function switches to callback mode when needed.
-	 * @return true when the user has already been authenticated; false otherwise.
-	 */
-	private function wasPreviouslyAuthenticated()
-	{
-		if ($this->isCallbackMode()) {
-			// Rebroadcast the pgtIou and pgtId to all nodes
-			if ($this->rebroadcast && !$this->_Request->has('rebroadcast')) {
-				$this->rebroadcast(CasConst::PGTIOU);
-			}
-			if ($this->rebroadcast && !isset($_POST['rebroadcast'])) {
-				$this->rebroadcast(CasConst::PGTIOU);
-			}
-			$this->callback();
-		}
-		$auth = false;
-		if ($this->isProxy()) {
-			// CAS proxy: username and PGT must be present
-			if ($this->isSessionAuthenticated() && $this->_Session->has($this::$_ServerConfig->sessionPgtKey)) {
-				// authentication already done
-				$this->setUser($this->_Session->get($this::$_ServerConfig->sessionUserKey));
-				if ($this->_Session->exists($this::$_ServerConfig->sessionAttributesKey)) {
-					$this->setAttributes($this->_Session->get($this::$_ServerConfig->sessionAttributesKey));
-				}
-				$this->setPGT($this->_Session->get($this::$_ServerConfig->sessionPgtKey));
-				$this->_Logger->info("user = `{$this->_Session->get($this::$_ServerConfig->sessionUserKey)}`, PGT = `{$this->_Session->get($this::$_ServerConfig->sessionPgtKey)}`");
-
-				// Include the list of proxies
-				if ($this->_Session->exists($this::$_ServerConfig->sessionProxiesKey)) {
-					$this->setProxies($this->_Session->get($this::$_ServerConfig->sessionProxiesKey));
-					$this->_Logger->info('proxies = "' . implode('", "', $this->_Session->get($this::$_ServerConfig->sessionProxiesKey)) . '"');
-				}
-
-				//重要修改
-				$auth = true;
-			} elseif ($this->isSessionAuthenticated() && !$this->_Session->has($this::$_ServerConfig->sessionPgtKey)
-			) {
-				// these two variables should be empty or not empty at the same time
-				$this->_Logger->info("username found (`{$this->_Session->get($this::$_ServerConfig->sessionUserKey)}``) but PGT is empty");
-				// unset all tickets to enforce authentication
-				$this->_Session->forget($this::$_ServerConfig->sessionCasKey);
-				$this->setTicket('');
-			} elseif (!$this->isSessionAuthenticated() && $this->_Session->has($this::$_ServerConfig->sessionPgtKey)) {
-				// these two variables should be empty or not empty at the same time
-				$this->_Logger->info("PGT found (`{$this->_Session->get($this::$_ServerConfig->sessionPgtKey)}`) but username is empty");
-				// unset all tickets to enforce authentication
-				$this->_Session->forget($this::$_ServerConfig->sessionCasKey);
-				$this->setTicket('');
-			} else {
-				$this->_Logger->info('neither user nor PGT found');
-			}
-		} else {
-			// `simple' CAS client (not a proxy): username must be present
-			if ($this->isSessionAuthenticated()) {
-				// authentication already done
-				$this->setUser($this->_Session->get($this::$_ServerConfig->sessionUserKey));
-				if ($this->_Session->exists($this::$_ServerConfig->sessionAttributesKey)) {
-					$this->setAttributes($this->_Session->get($this::$_ServerConfig->sessionAttributesKey));
-				}
-				$this->_Logger->info('user = `' . $this->_Session->get($this::$_ServerConfig->sessionUserKey) . '\'');
-
-				// Include the list of proxies
-				if ($this->_Session->exists($this::$_ServerConfig->sessionProxiesKey)) {
-					$this->setProxies($this->_Session->get($this::$_ServerConfig->sessionProxiesKey));
-					$this->_Logger->info('proxies = "' . implode('", "', $this->_Session->get($this::$_ServerConfig->sessionProxiesKey)) . '"');
-				}
-
-				$auth = true;
-			} else {
-				$this->_Logger->info('no user found');
-			}
-		}
-		return $auth;
-	}
-
-	/**
-	 * This method is called by CAS_Client::CAS_Client() when running in callback mode. It stores the PGT and its PGT Iou, prints its output and halts.
-	 * @return void
-	 */
-	private function callback()
-	{
-		$pgt_iou = $_GET['pgtIou'];
-		$pgt     = $_GET['pgtId'];
-		if (preg_match('/PGTIOU-[\.\-\w]/', $pgt_iou)) {
-			if (preg_match('/[PT]GT-[\.\-\w]/', $pgt)) {
-				$this->_Logger->info('Storing PGT `' . $pgt . '\' (id=`' . $pgt_iou . '\')');
-				echo '<p>Storing PGT `' . $pgt . '\' (id=`' . $pgt_iou . '\').</p>';
-				$this->storePGT($pgt, $pgt_iou);
-				$this->_Logger->info("Successfull Callback");
-			} else {
-				$this->_Logger->error('PGT format invalid' . $pgt);
-			}
-		} else {
-			$this->_Logger->error('PGTiou format invalid' . $pgt_iou);
-		}
-
-		// Flush the buffer to prevent from sending anything other then a 200 Success Status back to the CAS Server. The Exception would normally report as a 500 error.
-		flush();
-		//throw new GracefullTerminationException();
-	}
-
-	/**
-	 * Ensure that authentication was checked. Terminate with exception if no authentication was performed
-	 * @throws OutOfSequenceException
-	 * @return void
-	 */
-	public function ensureAuthenticationCallSuccessful()
-	{
-		$this->ensureAuthenticationCalled();
-		if (!$this->authenticationCaller['result']) {
-			throw new OutOfSequenceException("authentication was checked (by {$this->getAuthenticationCallerMethod()}() at {$this->getAuthenticationCallerFile()}:{$this->getAuthenticationCallerLine()}) but the method returned false");
-		}
-	}
-
-	/**
-	 * Answer information about the authentication caller. Throws a CAS_OutOfSequenceException if wasAuthenticationCalled() is false and markAuthenticationCall() didn't happen.
-	 * @return array Keys are 'file', 'line', and 'method'
-	 */
-	public function getAuthenticationCallerFile()
-	{
-		$this->ensureAuthenticationCalled();
-		return $this->authenticationCaller['file'];
-	}
-
-	/**
-	 * Answer information about the authentication caller. Throws a CAS_OutOfSequenceException if wasAuthenticationCalled() is false and markAuthenticationCall() didn't happen.
-	 * @return array Keys are 'file', 'line', and 'method'
-	 */
-	public function getAuthenticationCallerLine()
-	{
-		$this->ensureAuthenticationCalled();
-		return $this->authenticationCaller['line'];
-	}
-
-	/**
-	 * Answer information about the authentication caller. Throws a CAS_OutOfSequenceException if wasAuthenticationCalled() is false and markAuthenticationCall() didn't happen.
-	 * @return array Keys are 'file', 'line', and 'method'
-	 */
-	public function getAuthenticationCallerMethod()
-	{
-		$this->ensureAuthenticationCalled();
-		return $this->authenticationCaller['method'];
-	}
-
-	/**
-	 * Ensure that authentication was checked. Terminate with exception if no authentication was performed
-	 * @throws OutOfSequenceBeforeAuthenticationCallException
-	 * @return void
-	 */
-	private function ensureAuthenticationCalled()
-	{
-		if (!$this->wasAuthenticationCalled()) {
-			throw new OutOfSequenceBeforeAuthenticationCallException();
-		}
-	}
-
-	/**
-	 * Answer true if authentication has been checked.
-	 * @return bool
-	 */
-	public function wasAuthenticationCalled()
-	{
-		return !empty($this->authenticationCaller);
 	}
 
 	/**
@@ -997,27 +642,24 @@ class Client
 	 */
 	public function buildUri($url, array $params)
 	{
+		if (empty($params)) {
+			return $url;
+		}
 		$seperate = (strstr($url, '?') === false) ? '?' : '&';
 		$query    = http_build_query($params);
 		return $url . $seperate . $query;
 	}
 
 	/**
-	 * This method is used to validate a CAS 1,0 ticket; halt on failure, and
-	 * sets $validate_url, $text_reponse and $tree_response on success.
+	 * This method is used to validate a CAS 1,0 ticket; halt on failure, and sets $validate_url, $text_reponse and $tree_response on success.
 	 *
-	 * @param string     &$validate_url  reference to the the URL of the request to
-	 *                                   the CAS server.
-	 * @param string     &$text_response reference to the response of the CAS
-	 *                                   server, as is (XML text).
-	 * @param DOMElement &$tree_response reference to the response of the CAS
-	 *                                   server, as a DOM XML tree.
-	 * @param bool       $renew          true to force the authentication with the CAS server
+	 * @param string &$validate_url  reference to the the URL of the request to the CAS server.
+	 * @param string &$text_response reference to the response of the CAS server, as is (XML text).
+	 * @param bool   $renew          true to force the authentication with the CAS server
 	 *
-	 * @return bool true when successfull and issue a CAS_AuthenticationException
-	 * and false on an error
+	 * @return bool true when successfull and issue a AuthenticationException and false on an error
 	 */
-	protected function validateCAS10(&$validate_url, &$text_response, &$tree_response, $renew = false)
+	protected function validateCAS10(&$validate_url, &$text_response, $renew = false)
 	{
 		$query_params['ticket'] = urlencode($this->getTicket());
 		if ($renew) {
@@ -1060,7 +702,6 @@ class Client
 		// ticket has been validated, extract the user name
 		$arr = preg_split('/\n/', $text_response);
 		$this->setUser(trim($arr[1]));
-		$this->renameSession($this->getTicket());
 		return true;
 	}
 
@@ -1167,7 +808,7 @@ class Client
 				);
 			} else {
 				$this->setUser(trim($success_elements->item(0)->getElementsByTagName("user")->item(0)->nodeValue));
-				$this->readExtraAttributesCas20($success_elements);
+				//$this->readExtraAttributesCas20($success_elements);
 				// Store the proxies we are sitting behind for authorization checking
 				$proxyList = array();
 				if (sizeof($arr = $success_elements->item(0)->getElementsByTagName("proxy")) > 0) {
@@ -1189,7 +830,6 @@ class Client
 						$text_response
 					);
 				} else {
-					$this->renameSession($this->getTicket());
 					return true;
 				}
 			}
@@ -1279,7 +919,6 @@ class Client
 				$this->_Logger->info('user = `' . $user . '`');
 				$this->setUser($user);
 				$this->setSessionAttributes($text_response);
-				$this->renameSession($this->getTicket());
 				return true;
 			} else {
 				$this->_Logger->info('no <NameIdentifier> tag found in SAML payload');
@@ -1348,39 +987,6 @@ class Client
 	}
 
 	/**
-	 * Renaming the session
-	 *
-	 * @param string $ticket name of the ticket
-	 *
-	 * @return void
-	 */
-	private function renameSession($ticket)
-	{
-		if ($this->getCanChangeSessionId()) {
-			if (!empty($this->user)) {
-				$this->_Session->migrate();
-				$this->_Session->setId(md5($ticket));
-				return;
-
-				$old_session = $this->_Session->all();
-				$this->_Logger->info("Killing session: " . $this->_Session->getId());
-				$this->_Session->migrate(true);
-				// set up a new session, of name based on the ticket
-				$session_id = preg_replace('/[^a-zA-Z0-9\-]/', '', $ticket);
-				$this->_Logger->info("Starting session: " . $session_id);
-				//session()->setId($session_id);
-				//session()->start();
-				$this->_Logger->info('Restoring old session vars');
-				$this->_Session->replace($old_session);
-			} else {
-				$this->_Logger->info('Session should only be renamed after successfull authentication');
-			}
-		} else {
-			$this->_Logger->info('Skipping session rename since phpCAS is not handling the session.');
-		}
-	}
-
-	/**
 	 * This method will parse the DOM and pull out the attributes from the SAML payload and put them into an array, then put the array into the session.
 	 *
 	 * @param string $text_response the SAML payload.
@@ -1402,6 +1008,7 @@ class Client
 
 			if ($nodelist) {
 				foreach ($nodelist as $node) {
+					/** @var DOMElement $node */
 					$xres        = $xPath->query("saml:AttributeValue", $node);
 					$name        = $node->getAttribute("AttributeName");
 					$value_array = array();
@@ -1429,143 +1036,6 @@ class Client
 	}
 
 	/**
-	 * This method will parse the DOM and pull out the attributes from the XML payload and put them into an array, then put the array into the session.
-	 *
-	 * @param \DOMNodeList $success_elements payload of the response
-	 *
-	 * @return bool true when successfull, halt otherwise by calling
-	 * Client::_authError().
-	 */
-	private function readExtraAttributesCas20($success_elements)
-	{
-		$extra_attributes = array();
-		// "Jasig Style" Attributes:
-		//
-		// 	<cas:serviceResponse xmlns:cas='http://www.yale.edu/tp/cas'>
-		// 		<cas:authenticationSuccess>
-		// 			<cas:user>jsmith</cas:user>
-		// 			<cas:attributes>
-		// 				<cas:attraStyle>RubyCAS</cas:attraStyle>
-		// 				<cas:surname>Smith</cas:surname>
-		// 				<cas:givenName>John</cas:givenName>
-		// 				<cas:memberOf>CN=Staff,OU=Groups,DC=example,DC=edu</cas:memberOf>
-		// 				<cas:memberOf>CN=Spanish Department,OU=Departments,OU=Groups,DC=example,DC=edu</cas:memberOf>
-		// 			</cas:attributes>
-		// 			<cas:proxyGrantingTicket>PGTIOU-84678-8a9d2sfa23casd</cas:proxyGrantingTicket>
-		// 		</cas:authenticationSuccess>
-		// 	</cas:serviceResponse>
-		//
-		if ($this->AttributeParserCallbackFunction !== null && is_callable($this->AttributeParserCallbackFunction)) {
-			array_unshift($this->AttributeParserCallbackArgs, $success_elements->item(0));
-			$this->_Logger->info("Calling attritubeParser callback");
-			$extra_attributes = call_user_func_array($this->AttributeParserCallbackFunction, $this->AttributeParserCallbackArgs);
-		} elseif ($success_elements->item(0)->getElementsByTagName("attributes")->length != 0) {
-			$attr_nodes = $success_elements->item(0)->getElementsByTagName("attributes");
-			$this->_Logger->info("Found nested jasig style attributes");
-			if ($attr_nodes->item(0)->hasChildNodes()) {
-				// Nested Attributes
-				foreach ($attr_nodes->item(0)->childNodes as $attr_child) {
-					$this->_Logger->info("Attribute [{$attr_child->localName}] = {$attr_child->nodeValue}");
-					$this->addAttributeToArray($extra_attributes, $attr_child->localName, $attr_child->nodeValue);
-				}
-			}
-		} else {
-			// "RubyCAS Style" attributes
-			//
-			// 	<cas:serviceResponse xmlns:cas='http://www.yale.edu/tp/cas'>
-			// 		<cas:authenticationSuccess>
-			// 			<cas:user>jsmith</cas:user>
-			//
-			// 			<cas:attraStyle>RubyCAS</cas:attraStyle>
-			// 			<cas:surname>Smith</cas:surname>
-			// 			<cas:givenName>John</cas:givenName>
-			// 			<cas:memberOf>CN=Staff,OU=Groups,DC=example,DC=edu</cas:memberOf>
-			// 			<cas:memberOf>CN=Spanish Department,OU=Departments,OU=Groups,DC=example,DC=edu</cas:memberOf>
-			//
-			// 			<cas:proxyGrantingTicket>PGTIOU-84678-8a9d2sfa23casd</cas:proxyGrantingTicket>
-			// 		</cas:authenticationSuccess>
-			// 	</cas:serviceResponse>
-			//
-			$this->_Logger->info("Testing for rubycas style attributes");
-			$childnodes = $success_elements->item(0)->childNodes;
-			foreach ($childnodes as $attr_node) {
-				switch ($attr_node->localName) {
-					case 'user':
-					case 'proxies':
-					case 'proxyGrantingTicket':
-						continue;
-					default:
-						if (strlen(trim($attr_node->nodeValue))) {
-							$this->_Logger->info("Attribute [{$attr_node->localName}] = {$attr_node->nodeValue}");
-							$this->addAttributeToArray($extra_attributes, $attr_node->localName, $attr_node->nodeValue);
-						}
-				}
-			}
-		}
-		// "Name-Value" attributes.
-		//
-		// Attribute format from these mailing list thread:
-		// http://jasig.275507.n4.nabble.com/CAS-attributes-and-how-they-appear-in-the-CAS-response-td264272.html
-		// Note: This is a less widely used format, but in use by at least two institutions.
-		//
-		// 	<cas:serviceResponse xmlns:cas='http://www.yale.edu/tp/cas'>
-		// 		<cas:authenticationSuccess>
-		// 			<cas:user>jsmith</cas:user>
-		//
-		// 			<cas:attribute name='attraStyle' value='Name-Value' />
-		// 			<cas:attribute name='surname' value='Smith' />
-		// 			<cas:attribute name='givenName' value='John' />
-		// 			<cas:attribute name='memberOf' value='CN=Staff,OU=Groups,DC=example,DC=edu' />
-		// 			<cas:attribute name='memberOf' value='CN=Spanish Department,OU=Departments,OU=Groups,DC=example,DC=edu' />
-		//
-		// 			<cas:proxyGrantingTicket>PGTIOU-84678-8a9d2sfa23casd</cas:proxyGrantingTicket>
-		// 		</cas:authenticationSuccess>
-		// 	</cas:serviceResponse>
-		//
-		if (!count($extra_attributes) && $success_elements->item(0)->getElementsByTagName("attribute")->length != 0) {
-			/** @var \DOMNodeList $attr_nodes */
-			$attr_nodes = $success_elements->item(0)->getElementsByTagName("attribute");
-			$firstAttr  = $attr_nodes->item(0);
-			if (!$firstAttr->hasChildNodes() && $firstAttr->hasAttribute('name') && $firstAttr->hasAttribute('value')) {
-				$this->_Logger->info("Found Name-Value style attributes");
-				// Nested Attributes
-				foreach ($attr_nodes as $attr_node) {
-					if ($attr_node->hasAttribute('name') && $attr_node->hasAttribute('value')) {
-						$this->_Logger->info("Attribute [{$attr_node->getAttribute('name')}] = {$attr_node->getAttribute('value')}");
-						$this->addAttributeToArray($extra_attributes, $attr_node->getAttribute('name'), $attr_node->getAttribute('value'));
-					}
-				}
-			}
-		}
-		$this->setAttributes($extra_attributes);
-		return true;
-	}
-
-	/**
-	 * Add an attribute value to an array of attributes.
-	 *
-	 * @param array  &$attributeArray reference to array
-	 * @param string $name            name of attribute
-	 * @param string $value           value of attribute
-	 *
-	 * @return void
-	 */
-	private function addAttributeToArray(array &$attributeArray, $name, $value)
-	{
-		// If multiple attributes exist, add as an array value
-		if (isset($attributeArray[$name])) {
-			// Initialize the array with the existing value
-			if (!is_array($attributeArray[$name])) {
-				$existingValue         = $attributeArray[$name];
-				$attributeArray[$name] = array($existingValue);
-			}
-			$attributeArray[$name][] = trim($value);
-		} else {
-			$attributeArray[$name] = trim($value);
-		}
-	}
-
-	/**
 	 * This method is used to build the SAML POST body sent to /samlValidate URL.
 	 * @return string SOAP-encased SAMLP artifact (the ticket).
 	 */
@@ -1582,7 +1052,7 @@ class Client
 	 *
 	 * @return string URL
 	 */
-	public function getRequestUriWithoutTicket($withoutTicket = true)
+	public function getRequestUri($withoutTicket = true)
 	{
 		if (empty($this->requestUri)) {
 			$this->requestUri = $this->_Url->current();
@@ -1593,6 +1063,7 @@ class Client
 			if (isset($request_array[1])) {
 				parse_str($request_array[1], $query_params);
 				unset($query_params['ticket']);
+				unset($query_params['channel']);
 			}
 			$this->requestUri = $this->buildUri($request_array[0], $query_params);
 		}
@@ -1633,7 +1104,7 @@ class Client
 	protected function getTicketValidateUri()
 	{
 		return $this->buildUri($this::$_ServerConfig->casBaseServerUri . $this::$_ServerConfig->casValidateUri, [
-			'service' => urlencode($this->getRequestUriWithoutTicket())
+			'service' => urlencode($this->getRequestUri())
 		]);
 	}
 
@@ -1644,7 +1115,7 @@ class Client
 	public function getProxyTicketValidateUri()
 	{
 		return $this->buildUri($this::$_ServerConfig->casBaseServerUri . $this::$_ServerConfig->casProxyValidateUri, [
-			'service' => urlencode($this->getRequestUriWithoutTicket())
+			'service' => urlencode($this->getRequestUri())
 		]);
 	}
 
@@ -1657,10 +1128,171 @@ class Client
 	 */
 	public function getSamlValidateUri($renew = false)
 	{
-		$params['TARGET'] = urlencode($this->getRequestUriWithoutTicket());
+		$params['TARGET'] = urlencode($this->getRequestUri());
 		if ($renew) {
 			$params['renew'] = 'true';
 		}
 		return $this->buildUri($this::$_ServerConfig->casBaseServerUri . $this::$_ServerConfig->casSamlValidateUri, $params);
+	}
+
+	public function handLoginRequest(callable $callback, $renew = false)
+	{
+		if ($this->isAuthenticated($renew)) {
+			$callback($this->getUser());
+			return $this->_Redirect->to($this->getRequestUri());
+		} else {
+			return $this->_Redirect->to($this->getLoginUri());
+		}
+	}
+
+	public function isLogoutRequest()
+	{
+		return $this->_Request->has('logoutRequest');
+	}
+
+	public function handLogoutRequest($checkClient = true, $allowedClients = [])
+	{
+		$decoded_logout_rq = urldecode($_POST['logoutRequest']);
+		$this->_Logger->info("SAML REQUEST: " . $decoded_logout_rq);
+		$allowed   = false;
+		$client_ip = $this->_Request->ip();
+		$client    = gethostbyaddr($client_ip);
+		if ($checkClient) {
+			if (empty($allowedClients)) {
+				//TODO:验证服务器地址
+				$allowedClients = [$this::$_ServerConfig->casHostName];
+			}
+			$this->_Logger->info("Client: {$client}/{$client_ip}");
+			foreach ($allowedClients as $allowedClient) {
+				if (($client == $allowedClient) || ($client_ip == $allowedClient)) {
+					$this->_Logger->info("Allowed client `{$allowedClient}` matches, logout request is allowed");
+					$allowed = true;
+					break;
+				} else {
+					$this->_Logger->info("Allowed client `{$allowedClient}` does not match");
+				}
+			}
+		} else {
+			$this->_Logger->info("No access control set");
+			$allowed = true;
+		}
+		// If Logout command is permitted proceed with the logout
+		if ($allowed) {
+			$this->_Logger->info("Logout command allowed");
+			// Rebroadcast the logout request
+			//TODO:广播未监测
+			if ($this->rebroadcast && !isset($_POST['rebroadcast'])) {
+				$this->rebroadcast(CasConst::LOGOUT);
+			}
+			// Extract the ticket from the SAML Request
+			/*
+			preg_match("|<samlp:SessionIndex>(.*)</samlp:SessionIndex>|", $decoded_logout_rq, $tick, PREG_OFFSET_CAPTURE, 3);
+			$wrappedSamlSessionIndex = preg_replace('|<samlp:SessionIndex>|', '', $tick[0][0]);
+			$ticket2logout = preg_replace('|</samlp:SessionIndex>|', '', $wrappedSamlSessionIndex);
+			$this->_Logger->info("Ticket to logout: {$ticket2logout}");
+			*/
+			Auth::logout();
+			$this->_Request->session()->migrate(true);
+
+			// If phpCAS is managing the session_id, destroy session thanks to
+			// session_id.
+			/*
+			if ($this->getChangeSessionID()) {
+				$session_id = preg_replace('/[^a-zA-Z0-9\-]/', '', $ticket2logout);
+				phpCAS::trace("Session id: ".$session_id);
+
+				// destroy a possible application session created before phpcas
+				if (session()->getId() !== "") {
+					session()->invalidate();
+				}
+				// fix session ID
+				//session()->setId($session_id);
+				$_COOKIE[session()->getName()]=$session_id;
+				$_GET[session()->getName()]=$session_id;
+
+				// Overwrite session
+				session()->invalidate();
+			}
+			*/
+		} else {
+			$this->_Logger->error("Unauthorized logout request from client '" . $client . "'");
+		}
+	}
+
+	/**
+	 * This method rebroadcasts logout/pgtIou requests. Can be LOGOUT,PGTIOU
+	 *
+	 * @param int $type type of rebroadcasting.
+	 *
+	 * @return void
+	 */
+	private function rebroadcast($type)
+	{
+		// Try to determine the IP address of the server
+		if (empty($ip = $this->_Request->server('SERVER_ADDR'))) {
+			// IIS 7
+			$ip = $this->_Request->server('LOCAL_ADDR');
+		}
+		// Try to determine the DNS name of the server
+		if (!empty($ip)) {
+			$dns = gethostbyaddr($ip);
+		}
+		/** @var MultiRequestInterface $multiRequest */
+		$multiRequest = new $this->multiRequestImplementation();
+
+		for ($i = 0; $i < sizeof($this->rebroadcastNodes); $i++) {
+			if ((($this->getNodeType($this->rebroadcastNodes[$i]) == CasConst::HOSTNAME) && !empty($dns) && (stripos($this->rebroadcastNodes[$i], $dns) === false)) || (($this->getNodeType($this->rebroadcastNodes[$i]) == CasConst::IP) && !empty($ip) && (stripos($this->rebroadcastNodes[$i], $ip) === false))) {
+				$this->_Logger->info('Rebroadcast target URL: ' . $this->rebroadcastNodes[$i] . $this->_Request->server('REQUEST_URI'));
+				/** @var CurlRequest $request */
+				$request = new $this->requestImplementation();
+
+				$url = $this->rebroadcastNodes[$i] . $this->_Request->server('REQUEST_URI');
+				$request->setUrl($url);
+
+				if (count($this->rebroadcastHeaders)) {
+					$request->addHeaders($this->rebroadcastHeaders);
+				}
+
+				$request->makePost();
+				if ($type == CasConst::LOGOUT) {
+					// Logout request
+					$request->setPostBody('rebroadcast=false&logoutRequest=' . $_POST['logoutRequest']);
+				} elseif ($type == CasConst::PGTIOU) {
+					// pgtIou/pgtId rebroadcast
+					$request->setPostBody('rebroadcast=false');
+				}
+				$request->setCurlOptions([
+					                         CURLOPT_FAILONERROR    => 1,
+					                         CURLOPT_FOLLOWLOCATION => 1,
+					                         CURLOPT_RETURNTRANSFER => 1,
+					                         CURLOPT_CONNECTTIMEOUT => 1,
+					                         CURLOPT_TIMEOUT        => 4
+				                         ]);
+
+				$multiRequest->addRequest($request);
+			} else {
+				$this->_Logger->info("Rebroadcast not sent to self: {$this->rebroadcastNodes[$i]} ==" . (empty($ip) ? '' : $ip) . '/' . (empty($dns) ? '' : $dns));
+			}
+		}
+		// We need at least 1 request
+		if ($multiRequest->getNumRequests() > 0) {
+			$multiRequest->send();
+		}
+	}
+
+	/**
+	 * Determine the node type from the URL.
+	 *
+	 * @param String $nodeURL The node URL.
+	 *
+	 * @return string hostname
+	 */
+	private function getNodeType($nodeURL)
+	{
+		if (preg_match("/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/", $nodeURL)) {
+			return CasConst::IP;
+		} else {
+			return CasConst::HOSTNAME;
+		}
 	}
 }

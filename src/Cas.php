@@ -5,15 +5,18 @@
  * Date: 2018/2/24
  * Time: 15:18
  */
+
 namespace Iwannamaybe\PhpCas;
 
+use Closure;
+use Illuminate\Http\Request;
 
 class Cas
 {
 	/**
-	 * @var Client $casClient
+	 * @var Client
 	 */
-	protected $casClient;
+	protected $_Client;
 
 	/**
 	 * Cas constructor.
@@ -22,65 +25,53 @@ class Cas
 	 */
 	public function __construct(Client $client)
 	{
-		$this->casClient = $client;
+		$this->_Client   = $client;
 	}
 
 	/**
 	 * Get phpcas login uri
 	 *
 	 * @param string $redirect redirect back uri
+	 *
 	 * @return string
 	 */
 	public function getLoginUri($redirect = null)
 	{
-		return $this->casClient->getLoginUri($redirect);
+		return $this->_Client->getLoginUri($redirect);
 	}
 
 	/**
 	 * Get phpcas register uri
 	 *
 	 * @param string $redirect redirect back uri
+	 *
 	 * @return string
 	 */
 	public function getRegisterUri($redirect = null)
 	{
-		return $this->casClient->getRegisterUri($redirect);
+		return $this->_Client->getRegisterUri($redirect);
 	}
 
 	/**
 	 * Get phpcas logout uri
 	 *
 	 * @param string $redirect redirect back uri
+	 *
 	 * @return string
 	 */
 	public function getLogoutUri($redirect = null)
 	{
-		return $this->casClient->getLogoutUri($redirect);
+		return $this->_Client->getLogoutUri($redirect);
 	}
 
-	/**
-	 * Force phpcas verify
-	 *
-	 * @return bool
-	 */
-	public function forceAuthentication()
+	public function checkAuthentication(Request $request, Closure $next, callable $callback)
 	{
-		return $this->casClient->forceAuthentication();
-	}
-
-	/**
-	 * Auto inject the sso auth info
-	 */
-	public function injectCasAuth()
-	{
-		//TODO:CAS模拟
-		if (config('cas.cas_fake')) {
-			Auth::onceUsingId(config('cas.cas_fake_user_id'));
-		} elseif (Cas::isAuthenticated()) {
-			//TODO:default password for create new user
-			$user = User::firstOrNew(['mobile' => Cas::getUser()]);
-			//$user = User::firstOrNew(['mobile' => Cas::getUser(), 'password' => bcrypt(123456)]);
-			Auth::onceUsingId($user->id);
+		if($this->_Client->isLogoutRequest()){
+			return $this->_Client->handLogoutRequest();
+		}elseif ($this->_Client->hasTicket()) {
+			return $this->_Client->handLoginRequest($callback);
+		} else{
+			return $next($request);
 		}
 	}
 }
