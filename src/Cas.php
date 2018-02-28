@@ -25,7 +25,7 @@ class Cas
 	 */
 	public function __construct(Client $client)
 	{
-		$this->_Client   = $client;
+		$this->_Client = $client;
 	}
 
 	/**
@@ -66,11 +66,11 @@ class Cas
 
 	public function checkAuthentication(Request $request, Closure $next, callable $callback)
 	{
-		if($this->_Client->isLogoutRequest()){
+		if ($this->_Client->isLogoutRequest()) {
 			return $this->_Client->handLogoutRequest();
-		}elseif ($this->_Client->hasTicket()) {
+		} elseif ($this->_Client->hasTicket()) {
 			return $this->_Client->handLoginRequest($callback);
-		} else{
+		} else {
 			return $next($request);
 		}
 	}
