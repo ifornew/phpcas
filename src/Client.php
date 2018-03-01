@@ -145,25 +145,26 @@ class Client
 		$serverConfig->casFake       = boolval($this->_Config->get('phpcas.cas_fake', false));
 		$serverConfig->casFakeUserId = intval($this->_Config->get('phpcas.cas_fake_user_id', 1));
 
-		$serverConfig->casVersion           = $this->_Config->get('phpcas.cas_version', '2.0');
-		$serverConfig->casHostName          = $this->initCasHost();
-		$serverConfig->casPort              = intval($this->_Config->get('phpcas.cas_port', 443));
-		$serverConfig->casBaseServerUri     = $this->initBaseServerUri($serverConfig->casHostName, $serverConfig->casPort);
-		$serverConfig->casChannel           = $this->_Config->get('phpcas.cas_channel');
-		$serverConfig->casUri               = $this->_Config->get('phpcas.cas_uri');
-		$serverConfig->casLoginUri          = $this->_Config->get('phpcas.cas_login_uri');
-		$serverConfig->casLogoutUri         = $this->_Config->get('phpcas.cas_logout_uri');
-		$serverConfig->casRegisterUri       = $this->_Config->get('phpcas.cas_register_uri');
-		$serverConfig->casValidateUri       = $this->initValidateUri($serverConfig->casVersion);
-		$serverConfig->casProxyValidateUri  = $this->initProxyValidateUri($serverConfig->casVersion);
-		$serverConfig->casSamlValidateUri   = $this->initSamlValidateUri($serverConfig->casVersion);
-		$serverConfig->casCert              = $this->_Config->get('phpcas.cas_cert');
-		$serverConfig->casCertValidate      = boolval($this->_Config->get('phpcas.cas_cert_validate', false));
-		$serverConfig->casCertCnValidate    = boolval($this->_Config->get('phpcas.cas_cert_cn_validate', false));
-		$serverConfig->casLang              = $this->_Config->get('app.locale');
-		$serverConfig->sessionCasKey        = $this->_Config->get('phpcas.cas_session_key');
-		$serverConfig->sessionPgtKey        = "{$serverConfig->sessionCasKey}.pgt";
-		$serverConfig->sessionProxiesKey    = "{$serverConfig->sessionCasKey}.proxies";
+		$serverConfig->casVersion          = $this->_Config->get('phpcas.cas_version', '2.0');
+		$serverConfig->casHostName         = $this->initCasHost();
+		$serverConfig->casPort             = intval($this->_Config->get('phpcas.cas_port', 443));
+		$serverConfig->casBaseServerUri    = $this->initBaseServerUri($serverConfig->casHostName, $serverConfig->casPort);
+		$serverConfig->casChannel          = $this->_Config->get('phpcas.cas_channel');
+		$serverConfig->casUri              = $this->_Config->get('phpcas.cas_uri');
+		$serverConfig->casLoginUri         = $this->_Config->get('phpcas.cas_login_uri');
+		$serverConfig->casLogoutUri        = $this->_Config->get('phpcas.cas_logout_uri');
+		$serverConfig->casRegisterUri      = $this->_Config->get('phpcas.cas_register_uri');
+		$serverConfig->casValidateUri      = $this->initValidateUri($serverConfig->casVersion);
+		$serverConfig->casProxyValidateUri = $this->initProxyValidateUri($serverConfig->casVersion);
+		$serverConfig->casSamlValidateUri  = $this->initSamlValidateUri($serverConfig->casVersion);
+		$serverConfig->casCert             = $this->_Config->get('phpcas.cas_cert');
+		$serverConfig->casCertValidate     = boolval($this->_Config->get('phpcas.cas_cert_validate', false));
+		$serverConfig->casCertCnValidate   = boolval($this->_Config->get('phpcas.cas_cert_cn_validate', false));
+		$serverConfig->casLang             = $this->_Config->get('app.locale');
+		$serverConfig->sessionCasKey       = $this->_Config->get('phpcas.cas_session_key');
+		$serverConfig->sessionAuthSentKey  = "{$serverConfig->sessionCasKey}.auth_sent";
+		$serverConfig->sessionPgtKey       = "{$serverConfig->sessionCasKey}.pgt";
+		$serverConfig->sessionProxiesKey   = "{$serverConfig->sessionCasKey}.proxies";
 
 		$this::$_ServerConfig = $serverConfig;
 	}
@@ -275,6 +276,18 @@ class Client
 		} else {
 			return '';
 		}
+	}
+
+	/**
+	 * make redirect response to the given url
+	 *
+	 * @param $uri
+	 *
+	 * @return \Illuminate\Http\RedirectResponse
+	 */
+	public function makeRedirectResponse($uri)
+	{
+		return $this->_Redirect->to($uri);
 	}
 
 	/**
@@ -495,7 +508,7 @@ class Client
 	 */
 	public function isAuthenticated($renew = false)
 	{
-		if($this::$_ServerConfig->casFake){
+		if ($this::$_ServerConfig->casFake) {
 			$this->setUser($this::$_ServerConfig->casFakeUserId);
 			return true;
 		}
@@ -532,9 +545,9 @@ class Client
 				break;
 			default:
 				$this->_Logger->info('Protocoll error');
+				throw new CasInvalidArgumentException('Protocoll error');
 				break;
 		}
-		return false;
 	}
 
 	/**
@@ -1052,13 +1065,13 @@ class Client
 	 *
 	 * @return string URL
 	 */
-	public function getRequestUri($withoutChannel=true,$withoutTicket = true)
+	public function getRequestUri($withoutChannel = true, $withoutTicket = true)
 	{
 		if (empty($this->requestUri)) {
 			$route_name = $this->_Request->route()->getName();
-			if(in_array($route_name,['login','logout'])){
+			if (in_array($route_name, ['login', 'logout'])) {
 				$this->requestUri = $this->_Url->previous();
-			}else{
+			} else {
 				$this->requestUri = $this->_Url->current();
 			}
 		}
@@ -1067,13 +1080,13 @@ class Client
 		if (isset($request_array[1])) {
 			parse_str($request_array[1], $query_params);
 		}
-		if($withoutChannel){
+		if ($withoutChannel) {
 			unset($query_params['channel']);
 		}
-		if($withoutTicket){
+		if ($withoutTicket) {
 			unset($query_params['ticket']);
 		}
-		return $this->buildUri(rtrim($request_array[0],'/'), $query_params);
+		return $this->buildUri(rtrim($request_array[0], '/'), $query_params);
 	}
 
 	/**
@@ -1143,12 +1156,44 @@ class Client
 
 	public function handLoginRequest(callable $callback, $renew = false)
 	{
+		//isAuthenticated()验证为false时会自动抛出异常
 		if ($this->isAuthenticated($renew)) {
 			$callback($this->getUser());
-			return $this->_Redirect->to($this->getRequestUri());
+		}
+		return $this->makeRedirectResponse($this->getRequestUri());
+	}
+
+	public function isAuthJustSent()
+	{
+		if ($is_authentiction_before = $this->_Request->session()->has($this::$_ServerConfig->sessionAuthSentKey)) {
+			$this->_Request->session()->remove($this::$_ServerConfig->sessionAuthSentKey);
 		} else {
-			throw new AuthenticationException($this,'Ticket认证失败');
-			return $this->_Redirect->to($this->getLoginUri());
+			$this->_Request->session()->put($this::$_ServerConfig->sessionAuthSentKey, true);
+		}
+		return $is_authentiction_before;
+	}
+
+	/**
+	 * Determine if the request has a URI that should pass through CSRF verification.
+	 * @return bool
+	 */
+	protected function inExceptArray($excepts = [])
+	{
+		foreach ($excepts as $except) {
+			if ($except !== '/') {
+				$except = trim($except, '/');
+			}
+			if ($this->_Request->fullUrlIs($except) || $this->_Request->is($except)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public function skipCheckAuthentication($except = [])
+	{
+		if (Auth::check() || $this->inExceptArray($except) || $this->isAuthJustSent()) {
+			return true;
 		}
 	}
 

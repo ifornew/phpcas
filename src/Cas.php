@@ -10,6 +10,7 @@ namespace Iwannamaybe\PhpCas;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class Cas
 {
@@ -32,12 +33,14 @@ class Cas
 	 * Get phpcas login uri
 	 *
 	 * @param string $redirect redirect back uri
+	 * @param bool   $gateway
+	 * @param bool   $renew
 	 *
 	 * @return string
 	 */
-	public function getLoginUri($redirect = null)
+	public function getLoginUri($redirect = null, $gateway = false, $renew = false)
 	{
-		return $this->_Client->getLoginUri($redirect);
+		return $this->_Client->getLoginUri($redirect, $gateway, $renew);
 	}
 
 	/**
@@ -64,13 +67,25 @@ class Cas
 		return $this->_Client->getLogoutUri($redirect);
 	}
 
-	public function checkAuthentication(Request $request, Closure $next, callable $callback)
+	/**
+	 * handle the logout request from the server
+	 */
+	public function handLogoutRequest()
 	{
 		$this->_Client->handLogoutRequest();
+	}
+
+	public function skipCheckAuthentication($except = [])
+	{
+		return $this->_Client->skipCheckAuthentication($except);
+	}
+
+	public function checkAuthentication(callable $callback)
+	{
 		if ($this->_Client->hasTicket()) {
 			return $this->_Client->handLoginRequest($callback);
 		} else {
-			return $next($request);
+			return $this->_Client->makeRedirectResponse($this->getLoginUri(null, true));
 		}
 	}
 }

@@ -66,6 +66,8 @@ class ServerConfig
 
 	public $sessionCasKey;
 
+	public $sessionAuthSentKey;
+
 	public $sessionPgtKey;
 
 	public $sessionProxiesKey;
