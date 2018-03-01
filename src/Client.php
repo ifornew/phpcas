@@ -661,7 +661,7 @@ class Client
 	 */
 	protected function validateCAS10(&$validate_url, &$text_response, $renew = false)
 	{
-		$query_params['ticket'] = urlencode($this->getTicket());
+		$query_params['ticket'] = $this->getTicket();
 		if ($renew) {
 			$query_params['renew'] = 'true';
 		}
@@ -723,16 +723,15 @@ class Client
 		} else {
 			$validate_base_url = $this->getTicketValidateUri();
 		}
-		$query_params['ticket'] = urlencode($this->getTicket());
+		$query_params['ticket'] = $this->getTicket();
 		if ($this->isProxy()) {
 			// pass the callback url for CAS proxies
-			$query_params['pgtUrl'] = urlencode($this->getCallbackUri());
+			$query_params['pgtUrl'] = ($this->getCallbackUri());
 		}
 		if ($renew) {
 			$query_params['renew'] = 'true';
 		}
 		$validate_url = $this->buildUri($validate_base_url, $query_params);
-
 		// open and read the URL
 		if (!$this->readUri($validate_url, $headers, $text_response, $err_msg)) {
 			$this->_Logger->info('could not open URL \'' . $validate_url . '\' to validate (' . $err_msg . ')');
@@ -1048,26 +1047,33 @@ class Client
 	/**
 	 * This method returns the URL of the current request (without any ticket CGI parameter).
 	 *
+	 * @param bool $withoutChannel
 	 * @param bool $withoutTicket
 	 *
 	 * @return string URL
 	 */
-	public function getRequestUri($withoutTicket = true)
+	public function getRequestUri($withoutChannel=true,$withoutTicket = true)
 	{
 		if (empty($this->requestUri)) {
-			$this->requestUri = $this->_Url->current();
-		}
-		if ($withoutTicket) {
-			$request_array = explode('?', $this->requestUri, 2);
-			$query_params  = [];
-			if (isset($request_array[1])) {
-				parse_str($request_array[1], $query_params);
-				unset($query_params['ticket']);
-				unset($query_params['channel']);
+			$route_name = $this->_Request->route()->getName();
+			if(in_array($route_name,['login','logout'])){
+				$this->requestUri = $this->_Url->previous();
+			}else{
+				$this->requestUri = $this->_Url->current();
 			}
-			$this->requestUri = $this->buildUri($request_array[0], $query_params);
 		}
-		return $this->requestUri;
+		$request_array = explode('?', $this->requestUri, 2);
+		$query_params  = [];
+		if (isset($request_array[1])) {
+			parse_str($request_array[1], $query_params);
+		}
+		if($withoutChannel){
+			unset($query_params['channel']);
+		}
+		if($withoutTicket){
+			unset($query_params['ticket']);
+		}
+		return $this->buildUri(rtrim($request_array[0],'/'), $query_params);
 	}
 
 	/**
@@ -1104,7 +1110,7 @@ class Client
 	protected function getTicketValidateUri()
 	{
 		return $this->buildUri($this::$_ServerConfig->casBaseServerUri . $this::$_ServerConfig->casValidateUri, [
-			'service' => urlencode($this->getRequestUri())
+			'service' => $this->getRequestUri()
 		]);
 	}
 
@@ -1115,7 +1121,7 @@ class Client
 	public function getProxyTicketValidateUri()
 	{
 		return $this->buildUri($this::$_ServerConfig->casBaseServerUri . $this::$_ServerConfig->casProxyValidateUri, [
-			'service' => urlencode($this->getRequestUri())
+			'service' => $this->getRequestUri()
 		]);
 	}
 
@@ -1128,7 +1134,7 @@ class Client
 	 */
 	public function getSamlValidateUri($renew = false)
 	{
-		$params['TARGET'] = urlencode($this->getRequestUri());
+		$params['TARGET'] = $this->getRequestUri();
 		if ($renew) {
 			$params['renew'] = 'true';
 		}
@@ -1141,6 +1147,7 @@ class Client
 			$callback($this->getUser());
 			return $this->_Redirect->to($this->getRequestUri());
 		} else {
+			throw new AuthenticationException($this,'Ticket认证失败');
 			return $this->_Redirect->to($this->getLoginUri());
 		}
 	}
