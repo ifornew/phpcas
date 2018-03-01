@@ -1159,70 +1159,73 @@ class Client
 
 	public function handLogoutRequest($checkClient = true, $allowedClients = [])
 	{
-		$decoded_logout_rq = urldecode($_POST['logoutRequest']);
-		$this->_Logger->info("SAML REQUEST: " . $decoded_logout_rq);
-		$allowed   = false;
-		$client_ip = $this->_Request->ip();
-		$client    = gethostbyaddr($client_ip);
-		if ($checkClient) {
-			if (empty($allowedClients)) {
-				//TODO:验证服务器地址
-				$allowedClients = [$this::$_ServerConfig->casHostName];
-			}
-			$this->_Logger->info("Client: {$client}/{$client_ip}");
-			foreach ($allowedClients as $allowedClient) {
-				if (($client == $allowedClient) || ($client_ip == $allowedClient)) {
-					$this->_Logger->info("Allowed client `{$allowedClient}` matches, logout request is allowed");
-					$allowed = true;
-					break;
-				} else {
-					$this->_Logger->info("Allowed client `{$allowedClient}` does not match");
+		if ($this->isLogoutRequest()) {
+			$this->_Logger->info("登出请求来过");
+			$decoded_logout_rq = urldecode($_POST['logoutRequest']);
+			$this->_Logger->info("SAML REQUEST: " . $decoded_logout_rq);
+			$allowed   = false;
+			$client_ip = $this->_Request->ip();
+			$client    = gethostbyaddr($client_ip);
+			if ($checkClient) {
+				if (empty($allowedClients)) {
+					//TODO:验证服务器地址
+					$allowedClients = [$this::$_ServerConfig->casHostName];
 				}
+				$this->_Logger->info("Client: {$client}/{$client_ip}");
+				foreach ($allowedClients as $allowedClient) {
+					if (($client == $allowedClient) || ($client_ip == $allowedClient)) {
+						$this->_Logger->info("Allowed client `{$allowedClient}` matches, logout request is allowed");
+						$allowed = true;
+						break;
+					} else {
+						$this->_Logger->info("Allowed client `{$allowedClient}` does not match");
+					}
+				}
+			} else {
+				$this->_Logger->info("No access control set");
+				$allowed = true;
 			}
-		} else {
-			$this->_Logger->info("No access control set");
-			$allowed = true;
-		}
-		// If Logout command is permitted proceed with the logout
-		if ($allowed) {
-			$this->_Logger->info("Logout command allowed");
-			// Rebroadcast the logout request
-			//TODO:广播未监测
-			if ($this->rebroadcast && !isset($_POST['rebroadcast'])) {
-				$this->rebroadcast(CasConst::LOGOUT);
-			}
-			// Extract the ticket from the SAML Request
-			/*
-			preg_match("|<samlp:SessionIndex>(.*)</samlp:SessionIndex>|", $decoded_logout_rq, $tick, PREG_OFFSET_CAPTURE, 3);
-			$wrappedSamlSessionIndex = preg_replace('|<samlp:SessionIndex>|', '', $tick[0][0]);
-			$ticket2logout = preg_replace('|</samlp:SessionIndex>|', '', $wrappedSamlSessionIndex);
-			$this->_Logger->info("Ticket to logout: {$ticket2logout}");
-			*/
-			Auth::logout();
-			$this->_Request->session()->migrate(true);
+			// If Logout command is permitted proceed with the logout
+			if ($allowed) {
+				$this->_Logger->info("Logout command allowed");
+				// Rebroadcast the logout request
+				//TODO:广播未监测
+				if ($this->rebroadcast && !isset($_POST['rebroadcast'])) {
+					$this->rebroadcast(CasConst::LOGOUT);
+				}
+				// Extract the ticket from the SAML Request
+				/*
+				preg_match("|<samlp:SessionIndex>(.*)</samlp:SessionIndex>|", $decoded_logout_rq, $tick, PREG_OFFSET_CAPTURE, 3);
+				$wrappedSamlSessionIndex = preg_replace('|<samlp:SessionIndex>|', '', $tick[0][0]);
+				$ticket2logout = preg_replace('|</samlp:SessionIndex>|', '', $wrappedSamlSessionIndex);
+				$this->_Logger->info("Ticket to logout: {$ticket2logout}");
+				*/
+				Auth::logout();
+				$this->_Request->session()->migrate(true);
 
-			// If phpCAS is managing the session_id, destroy session thanks to
-			// session_id.
-			/*
-			if ($this->getChangeSessionID()) {
-				$session_id = preg_replace('/[^a-zA-Z0-9\-]/', '', $ticket2logout);
-				phpCAS::trace("Session id: ".$session_id);
+				// If phpCAS is managing the session_id, destroy session thanks to
+				// session_id.
+				/*
+				if ($this->getChangeSessionID()) {
+					$session_id = preg_replace('/[^a-zA-Z0-9\-]/', '', $ticket2logout);
+					phpCAS::trace("Session id: ".$session_id);
 
-				// destroy a possible application session created before phpcas
-				if (session()->getId() !== "") {
+					// destroy a possible application session created before phpcas
+					if (session()->getId() !== "") {
+						session()->invalidate();
+					}
+					// fix session ID
+					//session()->setId($session_id);
+					$_COOKIE[session()->getName()]=$session_id;
+					$_GET[session()->getName()]=$session_id;
+
+					// Overwrite session
 					session()->invalidate();
 				}
-				// fix session ID
-				//session()->setId($session_id);
-				$_COOKIE[session()->getName()]=$session_id;
-				$_GET[session()->getName()]=$session_id;
-
-				// Overwrite session
-				session()->invalidate();
+				*/
+			} else {
+				$this->_Logger->error("Unauthorized logout request from client '" . $client . "'");
 			}
-			*/
-		} else {
-			$this->_Logger->error("Unauthorized logout request from client '" . $client . "'");
 		}
 	}
 

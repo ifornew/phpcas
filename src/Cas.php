@@ -66,9 +66,8 @@ class Cas
 
 	public function checkAuthentication(Request $request, Closure $next, callable $callback)
 	{
-		if ($this->_Client->isLogoutRequest()) {
-			return $this->_Client->handLogoutRequest();
-		} elseif ($this->_Client->hasTicket()) {
+		$this->_Client->handLogoutRequest();
+		if ($this->_Client->hasTicket()) {
 			return $this->_Client->handLoginRequest($callback);
 		} else {
 			return $next($request);
