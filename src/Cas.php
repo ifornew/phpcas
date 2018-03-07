@@ -80,11 +80,11 @@ class Cas
 		return $this->_Client->skipCheckAuthentication($except);
 	}
 
-	public function checkAuthentication(callable $callback)
+	public function checkAuthentication(callable $authSuccessCallback)
 	{
 		$this->_Client->setJustSent();
 		if ($this->_Client->hasTicket()) {
-			return $this->_Client->handLoginRequest($callback);
+			return $this->_Client->handLoginRequest($authSuccessCallback);
 		} else {
 			return $this->_Client->makeRedirectResponse($this->getLoginUri(null, true));
 		}
