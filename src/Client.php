@@ -1185,11 +1185,16 @@ class Client
 	 */
 	protected function inExceptArray($excepts = [])
 	{
-		foreach ($excepts as $except) {
+		foreach ($excepts['url'] as $except) {
 			if ($except !== '/') {
 				$except = trim($except, '/');
 			}
 			if ($this->_Request->fullUrlIs($except) || $this->_Request->is($except)) {
+				return true;
+			}
+		}
+		foreach ($excepts['route'] as $except) {
+			if ($this->_Request->route()->getName() == $except) {
 				return true;
 			}
 		}
