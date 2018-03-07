@@ -82,6 +82,7 @@ class Cas
 
 	public function checkAuthentication(callable $callback)
 	{
+		$this->_Client->setJustSent();
 		if ($this->_Client->hasTicket()) {
 			return $this->_Client->handLoginRequest($callback);
 		} else {

@@ -1163,12 +1163,18 @@ class Client
 		return $this->makeRedirectResponse($this->getRequestUri());
 	}
 
+	/**
+	 * set tag for just sent verify request
+	 */
+	public function setJustSent()
+	{
+		$this->_Request->session()->put($this::$_ServerConfig->sessionAuthSentKey, true);
+	}
+
 	public function isAuthJustSent()
 	{
 		if ($is_authentiction_before = $this->_Request->session()->has($this::$_ServerConfig->sessionAuthSentKey)) {
 			$this->_Request->session()->remove($this::$_ServerConfig->sessionAuthSentKey);
-		} else {
-			$this->_Request->session()->put($this::$_ServerConfig->sessionAuthSentKey, true);
 		}
 		return $is_authentiction_before;
 	}
@@ -1192,8 +1198,12 @@ class Client
 
 	public function skipCheckAuthentication($except = [])
 	{
-		if (Auth::check() || $this->inExceptArray($except) || $this->isAuthJustSent()) {
+		if ($this->hasTicket()) {
+			return false;
+		} elseif (Auth::check() || $this->inExceptArray($except) || $this->isAuthJustSent()) {
 			return true;
+		}else {
+			return false;
 		}
 	}
 
