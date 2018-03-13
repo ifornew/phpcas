@@ -8,14 +8,14 @@ return [
 	*/
 	'cas_fake' => env('CAS_FAKE', false),
 
-	'cas_fake_user_id' => 1,
+	'cas_fake_user_id' => env('CAS_FAKE_USER_ID', 1),
 
 	/*
 	|--------------------------------------------------------------------------
 	| PHPCas UdfProxy
 	|--------------------------------------------------------------------------
 	*/
-	'cas_udf_proxy' => false,
+	'cas_udf_proxy'    => false,
 	'cas_udf_proxy_ip' => '127.0.0.1',
 
 	'cas_version'=>env('CAS_VERSION','2.0'),

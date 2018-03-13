@@ -1180,6 +1180,15 @@ class Client
 	}
 
 	/**
+	 * check if fake cas auth
+	 * @return bool
+	 */
+	public function checkFake()
+	{
+		return $this::$_ServerConfig->casFake;
+	}
+
+	/**
 	 * Determine if the request has a URI that should pass through CSRF verification.
 	 * @return bool
 	 */

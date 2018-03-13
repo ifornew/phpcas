@@ -83,7 +83,7 @@ class Cas
 	public function checkAuthentication(callable $authSuccessCallback)
 	{
 		$this->_Client->setJustSent();
-		if ($this->_Client->hasTicket()) {
+		if ($this->_Client->checkFake() || $this->_Client->hasTicket()) {
 			return $this->_Client->handLoginRequest($authSuccessCallback);
 		} else {
 			return $this->_Client->makeRedirectResponse($this->getLoginUri(null, true));
