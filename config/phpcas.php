@@ -6,7 +6,8 @@ return [
 	| PHPCas Fake
 	|--------------------------------------------------------------------------
 	*/
-	'cas_fake' => false,
+	'cas_fake' => env('CAS_FAKE', false),
+
 	'cas_fake_user_id' => 1,
 
 	/*
