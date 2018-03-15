@@ -1173,10 +1173,7 @@ class Client
 
 	public function isAuthJustSent()
 	{
-		if ($is_authentiction_before = $this->_Request->session()->has($this::$_ServerConfig->sessionAuthSentKey)) {
-			$this->_Request->session()->remove($this::$_ServerConfig->sessionAuthSentKey);
-		}
-		return $is_authentiction_before;
+		return $this->_Request->session()->pull($this::$_ServerConfig->sessionAuthSentKey, false);
 	}
 
 	/**
