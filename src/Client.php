@@ -154,6 +154,7 @@ class Client
 		$serverConfig->casLoginUri         = $this->_Config->get('phpcas.cas_login_uri');
 		$serverConfig->casLogoutUri        = $this->_Config->get('phpcas.cas_logout_uri');
 		$serverConfig->casRegisterUri      = $this->_Config->get('phpcas.cas_register_uri');
+		$serverConfig->casFindPasswordUri = $this->_Config->get('phpcas.cas_find_password_uri');
 		$serverConfig->casValidateUri      = $this->initValidateUri($serverConfig->casVersion);
 		$serverConfig->casProxyValidateUri = $this->initProxyValidateUri($serverConfig->casVersion);
 		$serverConfig->casSamlValidateUri  = $this->initSamlValidateUri($serverConfig->casVersion);
@@ -162,7 +163,6 @@ class Client
 		$serverConfig->casCertCnValidate   = boolval($this->_Config->get('phpcas.cas_cert_cn_validate', false));
 		$serverConfig->casLang             = $this->_Config->get('app.locale');
 		$serverConfig->sessionCasKey       = $this->_Config->get('phpcas.cas_session_key');
-		$serverConfig->sessionAuthSentKey  = "{$serverConfig->sessionCasKey}.auth_sent";
 		$serverConfig->sessionPgtKey       = "{$serverConfig->sessionCasKey}.pgt";
 		$serverConfig->sessionProxiesKey   = "{$serverConfig->sessionCasKey}.proxies";
 
@@ -342,6 +342,15 @@ class Client
 			'service' => ($redirect == null) ? $this->_Url->previous() : $redirect,
 			'channel' => $this::$_ServerConfig->casChannel
 		]);
+	}
+
+	/**
+	 * get the find password uri
+	 * @return string
+	 */
+	public function getFindPasswordUri()
+	{
+		return $this::$_ServerConfig->casFindPasswordUri;
 	}
 
 	/**
@@ -1164,19 +1173,6 @@ class Client
 	}
 
 	/**
-	 * set tag for just sent verify request
-	 */
-	public function setJustSent()
-	{
-		$this->_Request->session()->put($this::$_ServerConfig->sessionAuthSentKey, true);
-	}
-
-	public function isAuthJustSent()
-	{
-		return $this->_Request->session()->pull($this::$_ServerConfig->sessionAuthSentKey, false);
-	}
-
-	/**
 	 * check if fake cas auth
 	 * @return bool
 	 */
@@ -1205,17 +1201,6 @@ class Client
 			}
 		}
 		return false;
-	}
-
-	public function skipCheckAuthentication($except = [])
-	{
-		if ($this->hasTicket()) {
-			return false;
-		} elseif (Auth::check() || $this->inExceptArray($except) || $this->isAuthJustSent()) {
-			return true;
-		}else {
-			return false;
-		}
 	}
 
 	public function isLogoutRequest()

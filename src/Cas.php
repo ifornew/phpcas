@@ -68,6 +68,15 @@ class Cas
 	}
 
 	/**
+	 * get the find password uri
+	 * @return string
+	 */
+	public function getFindPasswordUri()
+	{
+		return $this->_Client->getFindPasswordUri();
+	}
+
+	/**
 	 * handle the logout request from the server
 	 */
 	public function handLogoutRequest()
@@ -75,18 +84,21 @@ class Cas
 		$this->_Client->handLogoutRequest();
 	}
 
-	public function skipCheckAuthentication($except = [])
+	/**
+	 * check the cas authentication while the ticket is received
+	 *
+	 * @param Request  $request
+	 * @param Closure  $next
+	 * @param callable $authSuccessCallback
+	 *
+	 * @return \Illuminate\Http\RedirectResponse|mixed
+	 */
+	public function checkAuthentication(Request $request, Closure $next, callable $authSuccessCallback)
 	{
-		return $this->_Client->skipCheckAuthentication($except);
-	}
-
-	public function checkAuthentication(callable $authSuccessCallback)
-	{
-		$this->_Client->setJustSent();
 		if ($this->_Client->checkFake() || $this->_Client->hasTicket()) {
 			return $this->_Client->handLoginRequest($authSuccessCallback);
 		} else {
-			return $this->_Client->makeRedirectResponse($this->getLoginUri(null, true));
+			return $next($request);
 		}
 	}
 }

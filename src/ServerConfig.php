@@ -33,6 +33,8 @@ class ServerConfig
 
 	public $casRegisterUri;
 
+	public $casFindPasswordUri;
+
 	public $casValidateUri;
 
 	public $casProxyValidateUri;
@@ -65,8 +67,6 @@ class ServerConfig
 	public $casUdfProxyIp;
 
 	public $sessionCasKey;
-
-	public $sessionAuthSentKey;
 
 	public $sessionPgtKey;
 

@@ -15,7 +15,7 @@ return [
 	| PHPCas UdfProxy
 	|--------------------------------------------------------------------------
 	*/
-	'cas_udf_proxy'    => false,
+	'cas_udf_proxy'    => env('CAS_UDF_PROXY', false),
 	'cas_udf_proxy_ip' => '127.0.0.1',
 
 	'cas_version'=>env('CAS_VERSION','2.0'),
@@ -59,6 +59,8 @@ return [
 
 	'cas_register_uri'=>env('CAS_REGISTER_URI',''),
 
+	'cas_find_password_uri' => env('CAS_FIND_PASSWORD_URI', ''),
+
 	/*
 	|--------------------------------------------------------------------------
 	| CAS Certificate
@@ -67,7 +69,7 @@ return [
 	| Path to the CAS certificate file
 	|
 	*/
-	'cas_cert' => env('CAS_CERT', ''),
+	'cas_cert'              => env('CAS_CERT', ''),
 
 	'cas_validate' => env('CAS_VALIDATE', false),
 
