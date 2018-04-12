@@ -162,6 +162,7 @@ class Client
 		$serverConfig->casCertValidate     = boolval($this->_Config->get('phpcas.cas_cert_validate', false));
 		$serverConfig->casCertCnValidate   = boolval($this->_Config->get('phpcas.cas_cert_cn_validate', false));
 		$serverConfig->casLang             = $this->_Config->get('app.locale');
+		$serverConfig->casTicketKey = $this->_Config->get('phpcas.cas_ticket_key');
 		$serverConfig->sessionCasKey       = $this->_Config->get('phpcas.cas_session_key');
 		$serverConfig->sessionPgtKey       = "{$serverConfig->sessionCasKey}.pgt";
 		$serverConfig->sessionProxiesKey   = "{$serverConfig->sessionCasKey}.proxies";
@@ -204,13 +205,13 @@ class Client
 
 	private function initTicket()
 	{
-		$ticket = $this->_Request->get('ticket', null);
+		$ticket = $this->_Request->get(self::$_ServerConfig->casTicketKey, null);
 		if (preg_match('/^[SP]T-/', $ticket)) {
 			$this->_Logger->info("Ticket `{$ticket}` found");
 			$this->setTicket($ticket);
 		} elseif (!empty($ticket)) {
 			//ill-formed ticket, halt
-			$this->_Logger->error('ill-formed ticket found in the URL (ticket=`' . htmlentities($ticket) . '\')');
+			$this->_Logger->error('ill-formed ticket found in the URL (' . self::$_ServerConfig->casTicketKey . '=`' . htmlentities($ticket) . '\')');
 		}
 	}
 
@@ -301,6 +302,9 @@ class Client
 	 */
 	public function getLoginUri($redirect = null, $gateway = false, $renew = false)
 	{
+		if ($this->checkFake()) {
+			return $this->buildUri($this->getRequestUri(), [self::$_ServerConfig->casTicketKey => 'ST-123-45678910']);
+		}
 		$params = [
 			'service' => $redirect == null ? $this->getRequestUri() : $redirect,
 			'channel' => $this::$_ServerConfig->casChannel
@@ -338,6 +342,9 @@ class Client
 	 */
 	public function getLogoutUri($redirect = null)
 	{
+		if ($this->checkFake()) {
+			return $this->buildUri($this->getRequestUri());
+		}
 		return $this->buildUri($this::$_ServerConfig->casBaseServerUri . $this::$_ServerConfig->casLogoutUri, [
 			'service' => ($redirect == null) ? $this->_Url->previous() : $redirect,
 			'channel' => $this::$_ServerConfig->casChannel
@@ -662,7 +669,7 @@ class Client
 	 *
 	 * @return string uri with query params
 	 */
-	public function buildUri($url, array $params)
+	public function buildUri($url, array $params = [])
 	{
 		if (empty($params)) {
 			return $url;
@@ -683,7 +690,7 @@ class Client
 	 */
 	protected function validateCAS10(&$validate_url, &$text_response, $renew = false)
 	{
-		$query_params['ticket'] = $this->getTicket();
+		$query_params[self::$_ServerConfig->casTicketKey] = $this->getTicket();
 		if ($renew) {
 			$query_params['renew'] = 'true';
 		}
@@ -745,7 +752,7 @@ class Client
 		} else {
 			$validate_base_url = $this->getTicketValidateUri();
 		}
-		$query_params['ticket'] = $this->getTicket();
+		$query_params[self::$_ServerConfig->casTicketKey] = $this->getTicket();
 		if ($this->isProxy()) {
 			// pass the callback url for CAS proxies
 			$query_params['pgtUrl'] = ($this->getCallbackUri());
@@ -1078,7 +1085,7 @@ class Client
 	{
 		if (empty($this->requestUri)) {
 			$route_name = $this->_Request->route()->getName();
-			if (in_array($route_name, ['login', 'logout'])) {
+			if (in_array($route_name, ['login', 'register', 'logout'])) {
 				$this->requestUri = $this->_Url->previous();
 			} else {
 				$this->requestUri = $this->_Url->current();
@@ -1093,7 +1100,7 @@ class Client
 			unset($query_params['channel']);
 		}
 		if ($withoutTicket) {
-			unset($query_params['ticket']);
+			unset($query_params[self::$_ServerConfig->casTicketKey]);
 		}
 		return $this->buildUri(rtrim($request_array[0], '/'), $query_params);
 	}

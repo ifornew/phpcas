@@ -95,7 +95,7 @@ class Cas
 	 */
 	public function checkAuthentication(Request $request, Closure $next, callable $authSuccessCallback)
 	{
-		if ($this->_Client->checkFake() || $this->_Client->hasTicket()) {
+		if ($this->_Client->hasTicket()) {
 			return $this->_Client->handLoginRequest($authSuccessCallback);
 		} else {
 			return $next($request);

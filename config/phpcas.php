@@ -85,5 +85,7 @@ return [
 
 	'cas_cert_cn_validate' => env('CAS_CERT_CN_VALIDATE', false),
 
-	'cas_session_key'=>env('CAS_SESSION_KEY', 'phpCas')
+	'cas_session_key' => env('CAS_SESSION_KEY', 'phpCas'),
+
+	'cas_ticket_key' => env('CAS_TICKET_KEY', 'ticket')
 ];
