@@ -34,7 +34,7 @@
       "Iwannamaybe\\PhpCas\\": "src/"
     },
     "files": [
-      "src/helpers.php"
+		    //"src/helpers.php"
     ]
   },
   "extra": {
