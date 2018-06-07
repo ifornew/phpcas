@@ -10,65 +10,72 @@ namespace Iwannamaybe\PhpCas;
 
 /**
  * Class CasServerInfo
+ *
  * @package Iwannamaybe\PhpCas
  */
 class ServerConfig
 {
-	/**
-	 * @var string $casVersion available cas version:1.0/2.0/3.0/S1
-	 */
-	public $casVersion;
+		/**
+		 * @var string $casVersion available cas version:1.0/2.0/3.0/S1
+		 */
+		public $casVersion;
 
-	public $casHostName;
+		public $casHostName;
 
-	public $casPort;
+		public $casPort;
 
-	public $casChannel;
+		public $casChannel;
 
-	public $casUri;
+		public $casGuardKey;
 
-	public $casLoginUri;
+		public $casGuard;
 
-	public $casLogoutUri;
+		public $casExcept;
 
-	public $casRegisterUri;
+		public $casLoginUri;
 
-	public $casFindPasswordUri;
+		public $casLogoutUri;
 
-	public $casValidateUri;
+		public $casRegisterUri;
 
-	public $casProxyValidateUri;
+		public $casFindPasswordUri;
 
-	public $casSamlValidateUri;
+		public $casValidateUri;
 
-	public $casCert;
+		public $casProxyValidateUri;
 
-	/**
-	 * @var bool $casCertCnValidate validate CN of the CAS server certificate
-	 */
-	public $casCertCnValidate = true;
+		public $casSamlValidateUri;
 
-	/**
-	 * @var bool $casCertValidate Set to true to validate the CAS server.
-	 */
-	public $casCertValidate = true;
+		public $casCert;
 
-	public $casFake;
+		/**
+		 * @var bool $casCertCnValidate validate CN of the CAS server certificate
+		 */
+		public $casCertCnValidate = true;
 
-	public $casFakeUserId;
+		/**
+		 * @var bool $casCertValidate Set to true to validate the CAS server.
+		 */
+		public $casCertValidate = true;
 
-	public $casLang;
+		public $casFake;
 
-	public $casBaseServerUri;
+		public $casFakeUserId;
 
-	//TODO:UDF代理
-	public $casUdfProxy;
+		public $casLang;
 
-	public $casUdfProxyIp;
+		public $casBaseServerUri;
 
-	public $sessionCasKey;
+		//TODO:UDF代理
+		public $casUdfProxy;
 
-	public $sessionPgtKey;
+		public $casUdfProxyIp;
 
-	public $sessionProxiesKey;
+		public $casTicketKey;
+
+		public $sessionCasKey;
+
+		public $sessionPgtKey;
+
+		public $sessionProxiesKey;
 }
