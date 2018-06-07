@@ -87,7 +87,7 @@ class Cas
 	/**
 	 * check the cas authentication while the ticket is received
 	 *
-	 * @param Request  $request
+	 * @param \Illuminate\Http\Request  $request
 	 * @param Closure  $next
 	 * @param callable $authSuccessCallback
 	 *
