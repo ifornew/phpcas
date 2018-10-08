@@ -1131,7 +1131,7 @@ class Client
 	 */
 	protected function inExceptArray()
 	{
-		if (starts_with($this->_Url->previous(), self::$_ServerConfig->casBaseServerUri . self::$_ServerConfig->casGuard[$this->casGuardName] . self::$_ServerConfig->casLoginUri)) {
+		if (starts_with($this->_Url->previous(), self::$_ServerConfig->casBaseServerUri)) {
 			return false;
 		}
 		foreach (self::$_ServerConfig->casExcept['url'] as $except) {
