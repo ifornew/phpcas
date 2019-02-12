@@ -208,7 +208,7 @@ class Client
 	{
 		$ticket = $this->_Request->get(self::$_ServerConfig->casTicketKey, null);
 		if (preg_match('/^[SP]T-/', $ticket)) {
-			$this->_Logger->debug("Ticket `{$ticket}` found");
+			$this->_Logger->info("Ticket `{$ticket}` found");
 			$this->setTicket($ticket);
 		} elseif (!empty($ticket)) {
 			//ill-formed ticket, halt
@@ -326,7 +326,7 @@ class Client
 		}
 
 		$url = $this->buildUri($this::$_ServerConfig->casBaseServerUri . self::$_ServerConfig->casGuard[$casGuard] . self::$_ServerConfig->casLoginUri, $params);
-		$this->_Logger->debug('【单点登陆】登陆地址', ['url' => $url]);
+		$this->_Logger->info('【单点登陆】登陆地址', ['url' => $url]);
 		return $url;
 	}
 
@@ -344,7 +344,7 @@ class Client
 			'service' => $this->getRedirectUri($casGuard, $redirect),
 			'channel' => $this::$_ServerConfig->casChannel
 		]);
-		$this->_Logger->debug('【单点登陆】注册地址', ['url' => $url]);
+		$this->_Logger->info('【单点登陆】注册地址', ['url' => $url]);
 		return $url;
 	}
 
@@ -366,7 +366,7 @@ class Client
 			'service' => $this->getRedirectUri($casGuard, $redirect),
 			'channel' => $this::$_ServerConfig->casChannel
 		]);
-		$this->_Logger->debug('【单点登陆】注销地址', ['url' => $url]);
+		$this->_Logger->info('【单点登陆】注销地址', ['url' => $url]);
 		return $url;
 	}
 
@@ -551,8 +551,9 @@ class Client
 	 *
 	 * @return true when the user is authenticated. Also may redirect to the same URL without the ticket.
 	 */
-	public function isAuthenticated($renew = false)
+	public function isAuthenticated(string $guard, $renew = false)
 	{
+		$this->casGuardName = $guard;
 		if ($this::$_ServerConfig->casFake) {
 			$this->setUser($this::$_ServerConfig->casFakeUserId);
 
@@ -561,7 +562,7 @@ class Client
 		switch ($this->getServerVersion()) {
 			case '1.0':
 				// if a Service Ticket was given, validate it
-				$this->_Logger->debug("CAS 1.0 ticket '{$this->getTicket()}' is present");
+				$this->_Logger->info("CAS 1.0 ticket '{$this->getTicket()}' is present");
 				$this->validateCAS10($validate_url, $text_response, $renew); // if it fails, it halts
 				$this->_Logger->info("CAS 1.0 ticket '{$this->getTicket()}' was validated");
 
@@ -570,12 +571,12 @@ class Client
 			case '2.0':
 			case '3.0':
 				// if a Proxy Ticket was given, validate it
-				$this->_Logger->debug("CAS {$this->getServerVersion()} ticket `{$this->getTicket()}` is present");
+				$this->_Logger->info("CAS {$this->getServerVersion()} ticket `{$this->getTicket()}` is present");
 				$this->validateCAS20($validate_url, $text_response, $tree_response, $renew); // note: if it fails, it halts
 				$this->_Logger->info("CAS {$this->getServerVersion()} ticket `{$this->getTicket()}` was validated");
 				if ($this->isProxy()) {
 					$this->validatePGT($validate_url, $text_response, $tree_response); // idem
-					$this->_Logger->debug("PGT `{$this->getPGT()}` was validated");
+					$this->_Logger->info("PGT `{$this->getPGT()}` was validated");
 					$this->_Request->session()->put($this::$_ServerConfig->sessionPgtKey, $this->getPGT());
 				}
 				if (!empty($proxies = $this->getProxies())) {
@@ -586,14 +587,14 @@ class Client
 				break;
 			case 'S1':
 				// if we have a SAML ticket, validate it.
-				$this->_Logger->debug("SAML 1.1 ticket `{$this->getTicket()}` is present");
+				$this->_Logger->info("SAML 1.1 ticket `{$this->getTicket()}` is present");
 				$this->validateSA($validate_url, $text_response, $tree_response, $renew); // if it fails, it halts
 				$this->_Logger->info("SAML 1.1 ticket `{$this->getTicket()}` was validated");
 
 				return true;
 				break;
 			default:
-				$this->_Logger->warning('Protocoll error');
+				$this->_Logger->info('Protocoll error');
 				throw new CasInvalidArgumentException('Protocoll error');
 				break;
 		}
@@ -611,7 +612,7 @@ class Client
 	private function validatePGT(&$validate_url, $text_response, $tree_response)
 	{
 		if ($tree_response->getElementsByTagName("proxyGrantingTicket")->length == 0) {
-			$this->_Logger->warning('<proxyGrantingTicket> not found');
+			$this->_Logger->info('<proxyGrantingTicket> not found');
 			// authentication succeded, but no PGT Iou was transmitted
 			throw new AuthenticationException(
 				$this, 'Ticket validated but no PGT Iou transmitted',
@@ -624,7 +625,7 @@ class Client
 			if (preg_match('/PGTIOU-[\.\-\w]/', $pgt_iou)) {
 				$pgt = $this->loadPGT($pgt_iou);
 				if ($pgt == false) {
-					$this->_Logger->warning('could not load PGT');
+					$this->_Logger->info('could not load PGT');
 					throw new AuthenticationException(
 						$this,
 						'PGT Iou was transmitted but PGT could not be retrieved',
@@ -636,7 +637,7 @@ class Client
 				}
 				$this->setPGT($pgt);
 			} else {
-				$this->_Logger->warning('PGTiou format error');
+				$this->_Logger->info('PGTiou format error');
 				throw new AuthenticationException(
 					$this,
 					'PGT Iou was transmitted but has wrong format',
@@ -739,7 +740,7 @@ class Client
 
 		// open and read the URL
 		if (!$this->readUri($validate_url, $headers, $text_response, $err_msg)) {
-			$this->_Logger->warning("could not open URL '{$validate_url}' to validate ({$err_msg})");
+			$this->_Logger->info("could not open URL '{$validate_url}' to validate ({$err_msg})");
 			throw new AuthenticationException(
 				$this,
 				'CAS 1.0 ticket not validated',
@@ -748,7 +749,7 @@ class Client
 			);
 		}
 		if (preg_match('/^no\n/', $text_response)) {
-			$this->_Logger->warning('Ticket has not been validated');
+			$this->_Logger->info('Ticket has not been validated');
 			throw new AuthenticationException(
 				$this,
 				'ST not validated',
@@ -758,7 +759,7 @@ class Client
 				$text_response
 			);
 		} elseif (!preg_match('/^yes\n/', $text_response)) {
-			$this->_Logger->warning('ill-formed response');
+			$this->_Logger->info('ill-formed response');
 			throw new AuthenticationException(
 				$this,
 				'Ticket not validated',
@@ -803,10 +804,10 @@ class Client
 		}
 		$validate_url = $this->buildUri($validate_base_url, $query_params);
 		$this->_Logger->debug('【单点登陆】构建验证地址的源地址', ['validate_base_url' => $validate_base_url]);
-		$this->_Logger->debug('【单点登陆】凭据验证地址', ['ticket' => $this->getTicket(), 'url' => $validate_url]);
+		$this->_Logger->info('【单点登陆】凭据验证地址', ['ticket' => $this->getTicket(), 'url' => $validate_url]);
 		// open and read the URL
 		if (!$this->readUri($validate_url, $headers, $text_response, $err_msg)) {
-			$this->_Logger->warning('could not open URL \'' . $validate_url . '\' to validate (' . $err_msg . ')');
+			$this->_Logger->info('could not open URL \'' . $validate_url . '\' to validate (' . $err_msg . ')');
 			throw new AuthenticationException(
 				$this,
 				'Ticket not validated',
@@ -884,11 +885,11 @@ class Client
 				$proxyList = [];
 				if (sizeof($arr = $success_elements->item(0)->getElementsByTagName("proxy")) > 0) {
 					foreach ($arr as $proxyElem) {
-						$this->_Logger->debug('Found Proxy:' . $proxyElem->nodeValue);
+						$this->_Logger->info('Found Proxy:' . $proxyElem->nodeValue);
 						$proxyList[] = trim($proxyElem->nodeValue);
 					}
 					$this->setProxies($proxyList);
-					$this->_Logger->debug('Storing Proxy List');
+					$this->_Logger->info('Storing Proxy List');
 				}
 				// Check if the proxies in front of us are allowed
 				if (!$this->getAllowedProxyChains()->isProxyListAllowed($proxyList)) {
@@ -933,7 +934,7 @@ class Client
 
 		// open and read the URL
 		if (!$this->readUri($validate_url, $headers, $text_response, $err_msg)) {
-			$this->_Logger->warning("could not open URL `{$validate_url}` to validate ({$err_msg})");
+			$this->_Logger->info("could not open URL `{$validate_url}` to validate ({$err_msg})");
 			throw new AuthenticationException(
 				$this,
 				'SA not validated',
@@ -941,7 +942,7 @@ class Client
 				true
 			);
 		}
-		$this->_Logger->debug('server version: ' . $this->getServerVersion());
+		$this->_Logger->info('server version: ' . $this->getServerVersion());
 		// analyze the result depending on the version
 		if ($this->getServerVersion() == CasConst::SAML_VERSION_1_1) {
 			// create new DOMDocument Object
@@ -950,7 +951,7 @@ class Client
 			$dom->preserveWhiteSpace = false;
 			// read the response of the CAS server into a DOM object
 			if (!($dom->loadXML($text_response))) {
-				$this->_Logger->warning('dom->loadXML() failed');
+				$this->_Logger->info('dom->loadXML() failed');
 				throw new AuthenticationException(
 					$this,
 					'SA not validated',
@@ -962,7 +963,7 @@ class Client
 			}
 			// read the root node of the XML tree
 			if (!($tree_response = $dom->documentElement)) {
-				$this->_Logger->warning('documentElement() failed');
+				$this->_Logger->info('documentElement() failed');
 				throw new AuthenticationException(
 					$this,
 					'SA not validated',
@@ -973,7 +974,7 @@ class Client
 				);
 			} elseif ($tree_response->localName != 'Envelope') {
 				// insure that tag name is 'Envelope'
-				$this->_Logger->warning("bad XML root node (should be `Envelope` instead of `{$tree_response->localName}`");
+				$this->_Logger->info("bad XML root node (should be `Envelope` instead of `{$tree_response->localName}`");
 				throw new AuthenticationException(
 					$this,
 					'SA not validated',
@@ -985,15 +986,15 @@ class Client
 			} elseif ($tree_response->getElementsByTagName("NameIdentifier")->length != 0) {
 				// check for the NameIdentifier tag in the SAML response
 				$success_elements = $tree_response->getElementsByTagName("NameIdentifier");
-				$this->_Logger->debug('NameIdentifier found');
+				$this->_Logger->info('NameIdentifier found');
 				$user = trim($success_elements->item(0)->nodeValue);
-				$this->_Logger->debug('user = `' . $user . '`');
+				$this->_Logger->info('user = `' . $user . '`');
 				$this->setUser($user);
 				$this->setSessionAttributes($text_response);
 
 				return true;
 			} else {
-				$this->_Logger->warning('no <NameIdentifier> tag found in SAML payload');
+				$this->_Logger->info('no <NameIdentifier> tag found in SAML payload');
 				throw new AuthenticationException(
 					$this,
 					'SA not validated',
@@ -1096,16 +1097,16 @@ class Client
 				foreach ($attr_array as $attr_key => $attr_value) {
 					if (count($attr_value) > 1) {
 						$this->attributes[$attr_key] = $attr_value;
-						$this->_Logger->debug("* " . $attr_key . "=" . print_r($attr_value, true));
+						$this->_Logger->info("* " . $attr_key . "=" . print_r($attr_value, true));
 					} else {
 						$this->attributes[$attr_key] = $attr_value[0];
-						$this->_Logger->debug("* " . $attr_key . "=" . $attr_value[0]);
+						$this->_Logger->info("* " . $attr_key . "=" . $attr_value[0]);
 					}
 				}
 
 				return true;
 			} else {
-				$this->_Logger->debug("SAML Attributes are empty");
+				$this->_Logger->info("SAML Attributes are empty");
 			}
 		}
 
@@ -1198,8 +1199,7 @@ class Client
 		if (empty($redirect)) {
 			$redirect = $this->getRequestUri();
 		}
-
-		return $this->buildUri($redirect, [self::$_ServerConfig->casGuardKey => $this->casGuardName]);
+		return $redirect;
 	}
 
 	/**
@@ -1241,7 +1241,7 @@ class Client
 	protected function getTicketValidateUri()
 	{
 		return $this->buildUri(self::$_ServerConfig->casBaseServerUri . self::$_ServerConfig->casGuard[$this->casGuardName] . self::$_ServerConfig->casValidateUri, [
-			'service' => $this->buildUri($this->getRequestUri(), [self::$_ServerConfig->casGuardKey => $this->casGuardName])
+			'service' => $this->getRequestUri()
 		]);
 	}
 
@@ -1274,13 +1274,12 @@ class Client
 		return $this->buildUri($this::$_ServerConfig->casBaseServerUri . $this::$_ServerConfig->casSamlValidateUri, $params);
 	}
 
-	public function handLoginRequest(callable $callback, $renew = false)
+	public function handLoginRequest(string $gurad, callable $callback, $renew = false)
 	{
 		//isAuthenticated()验证为false时会自动抛出异常
-		if ($this->isAuthenticated($renew)) {
+		if ($this->isAuthenticated($gurad, $renew)) {
 			$callback($this->getUser());
 		}
-
 		return $this->makeRedirectResponse($this->getRequestUri());
 	}
 
@@ -1302,6 +1301,7 @@ class Client
 	public function handLogoutRequest($checkClient = true, $allowedClients = [])
 	{
 		if ($this->isLogoutRequest()) {
+			$this->_Logger->info("登出请求来过");
 			$decoded_logout_rq = urldecode($_POST['logoutRequest']);
 			$this->_Logger->info("SAML REQUEST: " . $decoded_logout_rq);
 			$allowed   = false;
@@ -1312,23 +1312,23 @@ class Client
 					//TODO:验证服务器地址
 					$allowedClients = [$this::$_ServerConfig->casHostName];
 				}
-				$this->_Logger->debug("Client: {$client}/{$client_ip}");
+				$this->_Logger->info("Client: {$client}/{$client_ip}");
 				foreach ($allowedClients as $allowedClient) {
 					if (($client == $allowedClient) || ($client_ip == $allowedClient)) {
 						$this->_Logger->info("Allowed client `{$allowedClient}` matches, logout request is allowed");
 						$allowed = true;
 						break;
 					} else {
-						$this->_Logger->debug("Allowed client `{$allowedClient}` does not match");
+						$this->_Logger->info("Allowed client `{$allowedClient}` does not match");
 					}
 				}
 			} else {
-				$this->_Logger->debug("No access control set");
+				$this->_Logger->info("No access control set");
 				$allowed = true;
 			}
 			// If Logout command is permitted proceed with the logout
 			if ($allowed) {
-				$this->_Logger->debug("Logout command allowed");
+				$this->_Logger->info("Logout command allowed");
 				// Rebroadcast the logout request
 				//TODO:广播未监测
 				if ($this->rebroadcast && !isset($_POST['rebroadcast'])) {
@@ -1339,7 +1339,7 @@ class Client
 				preg_match("|<samlp:SessionIndex>(.*)</samlp:SessionIndex>|", $decoded_logout_rq, $tick, PREG_OFFSET_CAPTURE, 3);
 				$wrappedSamlSessionIndex = preg_replace('|<samlp:SessionIndex>|', '', $tick[0][0]);
 				$ticket2logout = preg_replace('|</samlp:SessionIndex>|', '', $wrappedSamlSessionIndex);
-				$this->_Logger->debug("Ticket to logout: {$ticket2logout}");
+				$this->_Logger->info("Ticket to logout: {$ticket2logout}");
 				*/
 				Auth::logout();
 				$this->_Request->session()->migrate(true);
@@ -1393,7 +1393,7 @@ class Client
 
 		for ($i = 0; $i < sizeof($this->rebroadcastNodes); $i++) {
 			if ((($this->getNodeType($this->rebroadcastNodes[$i]) == CasConst::HOSTNAME) && !empty($dns) && (stripos($this->rebroadcastNodes[$i], $dns) === false)) || (($this->getNodeType($this->rebroadcastNodes[$i]) == CasConst::IP) && !empty($ip) && (stripos($this->rebroadcastNodes[$i], $ip) === false))) {
-				$this->_Logger->debug('Rebroadcast target URL: ' . $this->rebroadcastNodes[$i] . $this->_Request->server('REQUEST_URI'));
+				$this->_Logger->info('Rebroadcast target URL: ' . $this->rebroadcastNodes[$i] . $this->_Request->server('REQUEST_URI'));
 				/** @var CurlRequest $request */
 				$request = new $this->requestImplementation();
 
@@ -1422,7 +1422,7 @@ class Client
 
 				$multiRequest->addRequest($request);
 			} else {
-				$this->_Logger->debug("Rebroadcast not sent to self: {$this->rebroadcastNodes[$i]} ==" . (empty($ip) ? '' : $ip) . '/' . (empty($dns) ? '' : $dns));
+				$this->_Logger->info("Rebroadcast not sent to self: {$this->rebroadcastNodes[$i]} ==" . (empty($ip) ? '' : $ip) . '/' . (empty($dns) ? '' : $dns));
 			}
 		}
 		// We need at least 1 request
