@@ -25,22 +25,22 @@ class Client
 	/**
 	 * @var Repository $_Config config manager
 	 */
-	protected $_Config;
+	private $_Config;
 
 	/**
 	 * @var UrlGenerator $_Url url manager
 	 */
-	protected $_Url;
+	private $_Url;
 
 	/**
 	 * @var Request $_Request request manager
 	 */
-	protected $_Request;
+	private $_Request;
 
 	/**
 	 * @var Redirector $_Redirect
 	 */
-	protected $_Redirect;
+	private $_Redirect;
 
 	/**
 	 * @var Log $_Logger log manager
@@ -48,22 +48,18 @@ class Client
 	private $_Logger;
 
 	/**
-	 * @var ServerConfig $_ServerConfig
-	 */
-	protected static $_ServerConfig;
-
-	/**
 	 * A translator to ... er ... translate stuff.
 	 *
 	 * @var \Symfony\Component\Translation\TranslatorInterface
 	 */
-	protected static $translator;
+	private static $translator;
 
-	protected $requestUri;
-	protected $ticket;
-	protected $casGuardName;
-	protected $isProxy;
-	protected $callbackUri;
+	private $requestUri;
+	private $ticket;
+	private $guard;
+	private $CasConfig;
+	private $isProxy;
+	private $callbackUri;
 
 	/**
 	 * @var string $_user The Authenticated user. Written by CAS_Client::_setUser(), read by Client::getUser().
@@ -128,116 +124,34 @@ class Client
 		$this->_Request  = $request;
 		$this->_Logger   = $logger;
 		$this->_Redirect = $redirect;
-		$this->initConfigs();
-		$this->initTicket();
-		$this->initCasGuardName();
 	}
 
 	/**
-	 * Init the phpcas configs
+	 * @param string $guard
+	 * @return $this
 	 */
-	private function initConfigs()
+	public function setGuard(string $guard)
 	{
-		$serverConfig                = new ServerConfig();
-		$serverConfig->casFake       = boolval($this->_Config->get('phpcas.cas_fake', false));
-		$serverConfig->casFakeUserId = intval($this->_Config->get('phpcas.cas_fake_user_id', 1));
-
-		$serverConfig->casVersion          = $this->_Config->get('phpcas.cas_version', '2.0');
-		$serverConfig->casHostName         = $this->initCasHost();
-		$serverConfig->casPort             = intval($this->_Config->get('phpcas.cas_port', 443));
-		$serverConfig->casBaseServerUri    = $this->initBaseServerUri($serverConfig->casHostName, $serverConfig->casPort);
-		$serverConfig->casChannel          = $this->_Config->get('phpcas.cas_channel');
-		$serverConfig->casGuardKey         = $this->_Config->get('phpcas.cas_guard_key');
-		$serverConfig->casGuard            = $this->_Config->get('phpcas.cas_guard');
-		$serverConfig->casExcept           = $this->_Config->get('phpcas.cas_except');
-		$serverConfig->casLoginUri         = $this->_Config->get('phpcas.cas_login_uri');
-		$serverConfig->casLogoutUri        = $this->_Config->get('phpcas.cas_logout_uri');
-		$serverConfig->casRegisterUri      = $this->_Config->get('phpcas.cas_register_uri');
-		$serverConfig->casFindPasswordUri  = $this->_Config->get('phpcas.cas_find_password_uri');
-		$serverConfig->casValidateUri      = $this->initValidateUri($serverConfig->casVersion);
-		$serverConfig->casProxyValidateUri = $this->initProxyValidateUri($serverConfig->casVersion);
-		$serverConfig->casSamlValidateUri  = $this->initSamlValidateUri($serverConfig->casVersion);
-		$serverConfig->casCert             = $this->_Config->get('phpcas.cas_cert');
-		$serverConfig->casCertValidate     = boolval($this->_Config->get('phpcas.cas_cert_validate', false));
-		$serverConfig->casCertCnValidate   = boolval($this->_Config->get('phpcas.cas_cert_cn_validate', false));
-		$serverConfig->casLang             = $this->_Config->get('app.locale');
-		$serverConfig->casTicketKey        = $this->_Config->get('phpcas.cas_ticket_key');
-		$serverConfig->sessionCasKey       = $this->_Config->get('phpcas.cas_session_key');
-		$serverConfig->sessionPgtKey       = "{$serverConfig->sessionCasKey}.pgt";
-		$serverConfig->sessionProxiesKey   = "{$serverConfig->sessionCasKey}.proxies";
-
-		$this::$_ServerConfig = $serverConfig;
-	}
-
-	/**
-	 * Get the phpcas hostname by UDF proxy
-	 *
-	 * @return string
-	 */
-	protected function initCasHost()
-	{
-		$cas_udf_proxy    = boolval($this->_Config->get('phpcas.cas_udf_proxy', false));
-		$cas_udf_proxy_ip = $this->_Config->get('phpcas.cas_udf_proxy_ip', '127.0.0.1');
-		if ($cas_udf_proxy && $this->_Request->ip() == $cas_udf_proxy_ip) {
-			return $cas_udf_proxy_ip;
-		}
-
-		return $this->_Config->get('phpcas.cas_hostname');
-	}
-
-	/**
-	 * init base phpcas server uri
-	 *
-	 * @param string $casHostName
-	 * @param int    $casPort
-	 *
-	 * @return string
-	 */
-	private function initBaseServerUri($casHostName, $casPort = 443)
-	{
-		if ($casPort == 443) {
-			return "https://{$casHostName}";
-		} elseif ($casPort == 80) {
-			return "http://{$casHostName}";
-		} else {
-			return "http://{$casHostName}:{$casPort}";
-		}
-	}
-
-	private function initTicket()
-	{
-		$ticket = $this->_Request->get(self::$_ServerConfig->casTicketKey, null);
-		if (preg_match('/^[SP]T-/', $ticket)) {
-			$this->_Logger->info("Ticket `{$ticket}` found");
-			$this->setTicket($ticket);
-		} elseif (!empty($ticket)) {
-			//ill-formed ticket, halt
-			$this->_Logger->error('ill-formed ticket found in the URL (' . self::$_ServerConfig->casTicketKey . '=`' . htmlentities($ticket) . '\')');
-		}
-	}
-
-	private function initCasGuardName()
-	{
-		$this->casGuardName = $this->_Request->get(self::$_ServerConfig->casGuardKey, null);
+		$this->guard     = $guard;
+		$this->CasConfig = $this->_Config->get("phpcas.{$guard}");
+		return $this;
 	}
 
 	/**
 	 * init cas validate uri
 	 *
-	 * @param string $casVersion
-	 *
 	 * @return string
 	 */
-	private function initValidateUri($casVersion = '2.0')
+	private function getValidateUri()
 	{
-		switch ($casVersion) {
-			case '1.0':
+		switch ($this->getVersion()) {
+			case CasConst::CAS_VERSION_1_0:
 				return '/validate';
 				break;
-			case '2.0':
+			case CasConst::CAS_VERSION_2_0:
 				return '/serviceValidate';
 				break;
-			case '3.0':
+			case CasConst::CAS_VERSION_3_0:
 				return '/p3/serviceValidate';
 				break;
 			default:
@@ -248,20 +162,18 @@ class Client
 	/**
 	 * init cas proxy validate uri
 	 *
-	 * @param string $casVersion
-	 *
 	 * @return string
 	 */
-	private function initProxyValidateUri($casVersion = '2.0')
+	private function getProxyValidateUri()
 	{
-		switch ($casVersion) {
-			case '1.0':
+		switch ($this->getVersion()) {
+			case CasConst::CAS_VERSION_1_0:
 				return '';
 				break;
-			case '2.0':
+			case CasConst::CAS_VERSION_2_0:
 				return 'proxyValidate';
 				break;
-			case '3.0':
+			case CasConst::CAS_VERSION_3_0:
 				return 'p3/proxyValidate';
 				break;
 			default:
@@ -270,53 +182,39 @@ class Client
 	}
 
 	/**
-	 * init cas saml validate uri
+	 * This method is used to retrieve the SAML validating URL of the CAS server.
 	 *
-	 * @param string $casVersion
+	 * @param bool $renew
 	 *
-	 * @return string
+	 * @return string samlValidate URL.
 	 */
-	private function initSamlValidateUri($casVersion = 'S1')
+	public function getSamlValidateUri($renew = false)
 	{
-		if ($casVersion == CasConst::SAML_VERSION_1_1) {
-			return 'samlValidate';
-		} else {
-			return '';
+		$params['TARGET'] = $this->getRequestUri();
+		if ($renew) {
+			$params['renew'] = 'true';
 		}
-	}
-
-	/**
-	 * make redirect response to the given url
-	 *
-	 * @param $uri
-	 *
-	 * @return \Illuminate\Http\RedirectResponse
-	 */
-	public function makeRedirectResponse($uri)
-	{
-		$uri = str_replace_last(self::$_ServerConfig->casGuardKey . '=' . $this->casGuardName, '', $uri);
-
-		return $this->_Redirect->to(rtrim($uri, '?'));
+		$cas_saml_validate_uri = $this->getVersion() == CasConst::SAML_VERSION_1_1 ? 'samlValidate' : '';
+		return $this->buildUri($this->CasConfig['cas_server'] . $cas_saml_validate_uri, $params);
 	}
 
 	/**
 	 * Get phpcas login uri
 	 *
-	 * @param string $casGuard cas guard
 	 * @param string $redirect redirect back uri
 	 * @param bool   $gateway
 	 * @param bool   $renew
 	 *
 	 * @return string
 	 */
-	public function getLoginUri($casGuard, $redirect = null, $gateway = false, $renew = false)
+	public function getLoginUri($redirect = null, $gateway = false, $renew = false)
 	{
-		if ($this->checkFake()) {
-			return $this->buildUri($this->getRequestUri(), [self::$_ServerConfig->casTicketKey => 'ST-123-45678910']);
+		if ($this->CasConfig['fake']) {
+			return $this->buildUri($this->getRequestUri(), [$this->CasConfig['ticket_key'] => 'ST-123-2345678910']);
 		}
 		$params = [
-			'service' => $this->getRedirectUri($casGuard, $redirect),
-			'channel' => $this::$_ServerConfig->casChannel
+			'service' => $this->getRedirectUri($redirect),
+			'channel' => $this->CasConfig['channel']
 		];
 		if ($gateway) {
 			$params['gateway'] = 'true';
@@ -325,61 +223,57 @@ class Client
 			$params['renew'] = 'true';
 		}
 
-		$url = $this->buildUri($this::$_ServerConfig->casBaseServerUri . self::$_ServerConfig->casGuard[$casGuard] . self::$_ServerConfig->casLoginUri, $params);
-		$this->_Logger->info('【单点登陆】登陆地址', ['url' => $url]);
+		$url = $this->buildUri($this->CasConfig['server'] . $this->CasConfig['login_uri'], $params);
+		$this->_Logger->debug('【单点登陆】登陆地址', ['url' => $url]);
 		return $url;
 	}
 
 	/**
 	 * Get phpcas register uri
 	 *
-	 * @param string $casGuard cas guard
 	 * @param string $redirect redirect back uri
 	 *
 	 * @return string
 	 */
-	public function getRegisterUri($casGuard, $redirect = null)
+	public function getRegisterUri($redirect = null)
 	{
-		$url = $this->buildUri($this::$_ServerConfig->casBaseServerUri . self::$_ServerConfig->casGuard[$casGuard] . self::$_ServerConfig->casRegisterUri, [
-			'service' => $this->getRedirectUri($casGuard, $redirect),
-			'channel' => $this::$_ServerConfig->casChannel
+		$url = $this->buildUri($this->CasConfig['server'] . $this->CasConfig['register_uri'], [
+			'service' => $this->getRedirectUri($redirect),
+			'channel' => $this->CasConfig['channel']
 		]);
-		$this->_Logger->info('【单点登陆】注册地址', ['url' => $url]);
+		$this->_Logger->debug('【单点登陆】注册地址', ['url' => $url]);
 		return $url;
 	}
 
 	/**
 	 * Get phpcas logout uri
 	 *
-	 * @param string $casGuard cas guard
 	 * @param string $redirect redirect back uri
 	 *
 	 * @return string
 	 */
-	public function getLogoutUri($casGuard, $redirect = null)
+	public function getLogoutUri($redirect = null)
 	{
-		if ($this->checkFake()) {
+		if ($this->CasConfig['fake']) {
 			return $this->buildUri($this->getRequestUri());
 		}
 
-		$url = $this->buildUri($this::$_ServerConfig->casBaseServerUri . self::$_ServerConfig->casGuard[$casGuard] . self::$_ServerConfig->casLogoutUri, [
-			'service' => $this->getRedirectUri($casGuard, $redirect),
-			'channel' => $this::$_ServerConfig->casChannel
+		$url = $this->buildUri($this->CasConfig['server'] . $this->CasConfig['logout_uri'], [
+			'service' => $this->getRedirectUri($redirect),
+			'channel' => $this->CasConfig['channel']
 		]);
-		$this->_Logger->info('【单点登陆】注销地址', ['url' => $url]);
+		$this->_Logger->debug('【单点登陆】注销地址', ['url' => $url]);
 		return $url;
 	}
 
 	/**
 	 * get the find password uri
 	 *
-	 * @param string $casGuard cas guard
-	 *
 	 * @return string
 	 */
-	public function getFindPasswordUri($casGuard)
+	public function getFindPasswordUri()
 	{
-		return self::$_ServerConfig->casGuard[$casGuard] . self::$_ServerConfig->casFindPasswordUri;
+		return $this->CasConfig['server'] . $this->CasConfig['find_password_uri'];
 	}
 
 	/**
@@ -389,19 +283,16 @@ class Client
 	 */
 	public function getTicket()
 	{
+		if (empty($this->ticket)) {
+			$ticket = $this->_Request->get($this->CasConfig['ticket_key'], null);
+			if (preg_match('/^[SP]T-/', $ticket)) {
+				$this->_Logger->debug("Ticket `{$ticket}` found");
+				$this->ticket = $ticket;
+			} else {
+				$this->_Logger->warning('ill-formed ticket found in the URL (' . $this->CasConfig['ticket_key'] . '=`' . htmlentities($ticket) . '\')');
+			}
+		}
 		return $this->ticket;
-	}
-
-	/**
-	 * This method stores the Service Ticket.
-	 *
-	 * @param string $ticket The Service Ticket.
-	 *
-	 * @return void
-	 */
-	protected function setTicket($ticket)
-	{
-		$this->ticket = $ticket;
 	}
 
 	/**
@@ -411,7 +302,7 @@ class Client
 	 */
 	public function hasTicket()
 	{
-		return !empty($this->ticket);
+		return !empty($this->getTicket());
 	}
 
 	/**
@@ -419,9 +310,9 @@ class Client
 	 *
 	 * @return string
 	 */
-	public function getServerVersion()
+	public function getVersion()
 	{
-		return $this::$_ServerConfig->casVersion;
+		return $this->CasConfig['version'];
 	}
 
 	/**
@@ -551,52 +442,41 @@ class Client
 	 *
 	 * @return true when the user is authenticated. Also may redirect to the same URL without the ticket.
 	 */
-	public function isAuthenticated(string $guard, $renew = false)
+	public function isAuthenticated($renew = false)
 	{
-		$this->casGuardName = $guard;
-		if ($this::$_ServerConfig->casFake) {
-			$this->setUser($this::$_ServerConfig->casFakeUserId);
-
+		if ($this->CasConfig['fake']) {
+			$this->setUser($this->CasConfig['fake_user_id']);
+			$this->_Logger->warning("CAS 1.0 faked ticket '{$this->getTicket()}' was validated");
 			return true;
 		}
-		switch ($this->getServerVersion()) {
-			case '1.0':
-				// if a Service Ticket was given, validate it
-				$this->_Logger->info("CAS 1.0 ticket '{$this->getTicket()}' is present");
+		switch ($this->getVersion()) {
+			case CasConst::CAS_VERSION_1_0:
+				$this->_Logger->debug("CAS 1.0 ticket '{$this->getTicket()}' is present");
 				$this->validateCAS10($validate_url, $text_response, $renew); // if it fails, it halts
-				$this->_Logger->info("CAS 1.0 ticket '{$this->getTicket()}' was validated");
-
+				$this->_Logger->debug("CAS 1.0 ticket '{$this->getTicket()}' was validated");
 				return true;
-				break;
-			case '2.0':
-			case '3.0':
-				// if a Proxy Ticket was given, validate it
-				$this->_Logger->info("CAS {$this->getServerVersion()} ticket `{$this->getTicket()}` is present");
+			case CasConst::CAS_VERSION_2_0:
+			case CasConst::CAS_VERSION_3_0:
+				$this->_Logger->debug("CAS {$this->getVersion()} ticket `{$this->getTicket()}` is present");
 				$this->validateCAS20($validate_url, $text_response, $tree_response, $renew); // note: if it fails, it halts
-				$this->_Logger->info("CAS {$this->getServerVersion()} ticket `{$this->getTicket()}` was validated");
+				$this->_Logger->debug("CAS {$this->getVersion()} ticket `{$this->getTicket()}` was validated");
 				if ($this->isProxy()) {
 					$this->validatePGT($validate_url, $text_response, $tree_response); // idem
-					$this->_Logger->info("PGT `{$this->getPGT()}` was validated");
-					$this->_Request->session()->put($this::$_ServerConfig->sessionPgtKey, $this->getPGT());
+					$this->_Logger->debug("PGT `{$this->getPGT()}` was validated");
+					$this->_Request->session()->put($this->CasConfig['session_key'] . '.pgt', $this->getPGT());
 				}
 				if (!empty($proxies = $this->getProxies())) {
-					$this->_Request->session()->put($this::$_ServerConfig->sessionProxiesKey, $proxies);
+					$this->_Request->session()->put($this->CasConfig['session_key'] . '.proxies', $proxies);
 				}
-
 				return true;
-				break;
-			case 'S1':
-				// if we have a SAML ticket, validate it.
-				$this->_Logger->info("SAML 1.1 ticket `{$this->getTicket()}` is present");
+			case CasConst::SAML_VERSION_1_1:
+				$this->_Logger->debug("SAML 1.1 ticket `{$this->getTicket()}` is present");
 				$this->validateSA($validate_url, $text_response, $tree_response, $renew); // if it fails, it halts
-				$this->_Logger->info("SAML 1.1 ticket `{$this->getTicket()}` was validated");
-
+				$this->_Logger->debug("SAML 1.1 ticket `{$this->getTicket()}` was validated");
 				return true;
-				break;
 			default:
-				$this->_Logger->info('Protocoll error');
+				$this->_Logger->debug('Protocoll error');
 				throw new CasInvalidArgumentException('Protocoll error');
-				break;
 		}
 	}
 
@@ -612,7 +492,7 @@ class Client
 	private function validatePGT(&$validate_url, $text_response, $tree_response)
 	{
 		if ($tree_response->getElementsByTagName("proxyGrantingTicket")->length == 0) {
-			$this->_Logger->info('<proxyGrantingTicket> not found');
+			$this->_Logger->debug('<proxyGrantingTicket> not found');
 			// authentication succeded, but no PGT Iou was transmitted
 			throw new AuthenticationException(
 				$this, 'Ticket validated but no PGT Iou transmitted',
@@ -625,7 +505,7 @@ class Client
 			if (preg_match('/PGTIOU-[\.\-\w]/', $pgt_iou)) {
 				$pgt = $this->loadPGT($pgt_iou);
 				if ($pgt == false) {
-					$this->_Logger->info('could not load PGT');
+					$this->_Logger->notice('could not load PGT');
 					throw new AuthenticationException(
 						$this,
 						'PGT Iou was transmitted but PGT could not be retrieved',
@@ -637,7 +517,7 @@ class Client
 				}
 				$this->setPGT($pgt);
 			} else {
-				$this->_Logger->info('PGTiou format error');
+				$this->_Logger->debug('PGTiou format error');
 				throw new AuthenticationException(
 					$this,
 					'PGT Iou was transmitted but has wrong format',
@@ -731,16 +611,13 @@ class Client
 	 */
 	protected function validateCAS10(&$validate_url, &$text_response, $renew = false)
 	{
-		$query_params[self::$_ServerConfig->casTicketKey] = $this->getTicket();
+		$query_params[$this->CasConfig['ticket_key']] = $this->getTicket();
 		if ($renew) {
 			$query_params['renew'] = 'true';
 		}
-		// build the URL to validate the ticket
 		$validate_url = $this->buildUri($this->getTicketValidateUri(), $query_params);
-
-		// open and read the URL
 		if (!$this->readUri($validate_url, $headers, $text_response, $err_msg)) {
-			$this->_Logger->info("could not open URL '{$validate_url}' to validate ({$err_msg})");
+			$this->_Logger->notice("could not open URL '{$validate_url}' to validate ({$err_msg})");
 			throw new AuthenticationException(
 				$this,
 				'CAS 1.0 ticket not validated',
@@ -749,7 +626,7 @@ class Client
 			);
 		}
 		if (preg_match('/^no\n/', $text_response)) {
-			$this->_Logger->info('Ticket has not been validated');
+			$this->_Logger->debug('Ticket has not been validated');
 			throw new AuthenticationException(
 				$this,
 				'ST not validated',
@@ -759,7 +636,7 @@ class Client
 				$text_response
 			);
 		} elseif (!preg_match('/^yes\n/', $text_response)) {
-			$this->_Logger->info('ill-formed response');
+			$this->_Logger->debug('ill-formed response');
 			throw new AuthenticationException(
 				$this,
 				'Ticket not validated',
@@ -772,7 +649,6 @@ class Client
 		// ticket has been validated, extract the user name
 		$arr = preg_split('/\n/', $text_response);
 		$this->setUser(trim($arr[1]));
-
 		return true;
 	}
 
@@ -794,20 +670,18 @@ class Client
 		} else {
 			$validate_base_url = $this->getTicketValidateUri();
 		}
-		$query_params[self::$_ServerConfig->casTicketKey] = $this->getTicket();
+		$query_params[$this->CasConfig['ticket_key']] = $this->getTicket();
 		if ($this->isProxy()) {
-			// pass the callback url for CAS proxies
-			$query_params['pgtUrl'] = ($this->getCallbackUri());
+			$query_params['pgtUrl'] = $this->getCallbackUri();
 		}
 		if ($renew) {
 			$query_params['renew'] = 'true';
 		}
 		$validate_url = $this->buildUri($validate_base_url, $query_params);
 		$this->_Logger->debug('【单点登陆】构建验证地址的源地址', ['validate_base_url' => $validate_base_url]);
-		$this->_Logger->info('【单点登陆】凭据验证地址', ['ticket' => $this->getTicket(), 'url' => $validate_url]);
-		// open and read the URL
+		$this->_Logger->debug('【单点登陆】凭据验证地址', ['ticket' => $this->getTicket(), 'url' => $validate_url]);
 		if (!$this->readUri($validate_url, $headers, $text_response, $err_msg)) {
-			$this->_Logger->info('could not open URL \'' . $validate_url . '\' to validate (' . $err_msg . ')');
+			$this->_Logger->notice('could not open URL \'' . $validate_url . '\' to validate (' . $err_msg . ')');
 			throw new AuthenticationException(
 				$this,
 				'Ticket not validated',
@@ -815,15 +689,10 @@ class Client
 				true
 			);
 		}
-
-		$dom = new DOMDocument();
-		// Fix possible whitspace problems
+		$dom                     = new DOMDocument();
 		$dom->preserveWhiteSpace = false;
-		// CAS servers should only return data in utf-8
-		$dom->encoding = "utf-8";
-		// read the response of the CAS server into a DOMDocument object
+		$dom->encoding           = "utf-8";// CAS servers should only return data in utf-8
 		if (!($dom->loadXML($text_response))) {
-			// read failed
 			throw new AuthenticationException(
 				$this,
 				'Ticket not validated',
@@ -833,7 +702,6 @@ class Client
 				$text_response
 			);
 		} elseif (!($tree_response = $dom->documentElement)) {
-			// read the root node of the XML tree failed
 			throw new AuthenticationException(
 				$this,
 				'Ticket not validated',
@@ -843,7 +711,6 @@ class Client
 				$text_response
 			);
 		} elseif ($tree_response->localName != 'serviceResponse') {
-			// insure that tag name is 'serviceResponse' bad root node
 			throw new AuthenticationException(
 				$this,
 				'Ticket not validated',
@@ -853,7 +720,6 @@ class Client
 				$text_response
 			);
 		} elseif ($tree_response->getElementsByTagName("authenticationFailure")->length != 0) {
-			// authentication failed, extract the error code and message and throw exception
 			$auth_fail_list = $tree_response->getElementsByTagName("authenticationFailure");
 			throw new AuthenticationException(
 				$this,
@@ -866,10 +732,8 @@ class Client
 				trim($auth_fail_list->item(0)->nodeValue)
 			);
 		} elseif ($tree_response->getElementsByTagName("authenticationSuccess")->length != 0) {
-			// authentication succeded, extract the user name
 			$success_elements = $tree_response->getElementsByTagName("authenticationSuccess");
 			if ($success_elements->item(0)->getElementsByTagName("user")->length == 0) {
-				// no user specified => error
 				throw new AuthenticationException(
 					$this,
 					'Ticket not validated',
@@ -885,11 +749,11 @@ class Client
 				$proxyList = [];
 				if (sizeof($arr = $success_elements->item(0)->getElementsByTagName("proxy")) > 0) {
 					foreach ($arr as $proxyElem) {
-						$this->_Logger->info('Found Proxy:' . $proxyElem->nodeValue);
+						$this->_Logger->debug('Found Proxy:' . $proxyElem->nodeValue);
 						$proxyList[] = trim($proxyElem->nodeValue);
 					}
 					$this->setProxies($proxyList);
-					$this->_Logger->info('Storing Proxy List');
+					$this->_Logger->debug('Storing Proxy List');
 				}
 				// Check if the proxies in front of us are allowed
 				if (!$this->getAllowedProxyChains()->isProxyListAllowed($proxyList)) {
@@ -929,12 +793,9 @@ class Client
 	 */
 	public function validateSA(&$validate_url, &$text_response, &$tree_response, $renew = false)
 	{
-		// build the URL to validate the ticket
 		$validate_url = $this->getSamlValidateUri($renew);
-
-		// open and read the URL
 		if (!$this->readUri($validate_url, $headers, $text_response, $err_msg)) {
-			$this->_Logger->info("could not open URL `{$validate_url}` to validate ({$err_msg})");
+			$this->_Logger->notice("could not open URL `{$validate_url}` to validate ({$err_msg})");
 			throw new AuthenticationException(
 				$this,
 				'SA not validated',
@@ -942,16 +803,12 @@ class Client
 				true
 			);
 		}
-		$this->_Logger->info('server version: ' . $this->getServerVersion());
-		// analyze the result depending on the version
-		if ($this->getServerVersion() == CasConst::SAML_VERSION_1_1) {
-			// create new DOMDocument Object
-			$dom = new DOMDocument();
-			// Fix possible whitspace problems
+		$this->_Logger->debug('server version: ' . $this->getVersion());
+		if ($this->getVersion() == CasConst::SAML_VERSION_1_1) {
+			$dom                     = new DOMDocument();
 			$dom->preserveWhiteSpace = false;
-			// read the response of the CAS server into a DOM object
 			if (!($dom->loadXML($text_response))) {
-				$this->_Logger->info('dom->loadXML() failed');
+				$this->_Logger->debug('dom->loadXML() failed');
 				throw new AuthenticationException(
 					$this,
 					'SA not validated',
@@ -961,9 +818,8 @@ class Client
 					$text_response
 				);
 			}
-			// read the root node of the XML tree
 			if (!($tree_response = $dom->documentElement)) {
-				$this->_Logger->info('documentElement() failed');
+				$this->_Logger->debug('documentElement() failed');
 				throw new AuthenticationException(
 					$this,
 					'SA not validated',
@@ -973,8 +829,7 @@ class Client
 					$text_response
 				);
 			} elseif ($tree_response->localName != 'Envelope') {
-				// insure that tag name is 'Envelope'
-				$this->_Logger->info("bad XML root node (should be `Envelope` instead of `{$tree_response->localName}`");
+				$this->_Logger->debug("bad XML root node (should be `Envelope` instead of `{$tree_response->localName}`");
 				throw new AuthenticationException(
 					$this,
 					'SA not validated',
@@ -984,17 +839,15 @@ class Client
 					$text_response
 				);
 			} elseif ($tree_response->getElementsByTagName("NameIdentifier")->length != 0) {
-				// check for the NameIdentifier tag in the SAML response
 				$success_elements = $tree_response->getElementsByTagName("NameIdentifier");
-				$this->_Logger->info('NameIdentifier found');
+				$this->_Logger->debug('NameIdentifier found');
 				$user = trim($success_elements->item(0)->nodeValue);
-				$this->_Logger->info('user = `' . $user . '`');
+				$this->_Logger->debug('user = `' . $user . '`');
 				$this->setUser($user);
 				$this->setSessionAttributes($text_response);
-
 				return true;
 			} else {
-				$this->_Logger->info('no <NameIdentifier> tag found in SAML payload');
+				$this->_Logger->debug('no <NameIdentifier> tag found in SAML payload');
 				throw new AuthenticationException(
 					$this,
 					'SA not validated',
@@ -1005,7 +858,6 @@ class Client
 				);
 			}
 		}
-
 		return false;
 	}
 
@@ -1030,14 +882,14 @@ class Client
 			$request->setCurlOptions($this->curlOptions);
 		}
 		$request->setUrl($url);
-		if (empty($this::$_ServerConfig->casCert) && $this::$_ServerConfig->casCertValidate) {
-			$this->_Logger->error('one of the methods setCasCACert() or setNoCasCertValidation() must be called.');
+		if ($this->CasConfig['cert_validate']) {
+			if (empty($this->CasConfig['cert'])) {
+				$this->_Logger->warning('one of the methods setCasCACert() or setNoCasCertValidation() must be called.');
+			} else {
+				$request->setSslCaCert($this->CasConfig['cert'], $this->CasConfig['cert_cn_validate']);
+			}
 		}
-		if (!empty($this::$_ServerConfig->casCert)) {
-			$request->setSslCaCert($this::$_ServerConfig->casCert, $this::$_ServerConfig->casCertCnValidate);
-		}
-		// add extra stuff if SAML
-		if ($this::$_ServerConfig->casVersion == CasConst::SAML_VERSION_1_1) {
+		if ($this->getVersion() == CasConst::SAML_VERSION_1_1) {
 			$request->addHeader("soapaction: http://www.oasis-open.org/committees/security");
 			$request->addHeader("cache-control: no-cache");
 			$request->addHeader("pragma: no-cache");
@@ -1051,13 +903,11 @@ class Client
 			$headers = $request->getResponseHeaders();
 			$body    = $request->getResponseBody();
 			$err_msg = '';
-
 			return true;
 		} else {
 			$headers = '';
 			$body    = '';
 			$err_msg = $request->getErrorMessage();
-
 			return false;
 		}
 	}
@@ -1071,17 +921,14 @@ class Client
 	 */
 	private function setSessionAttributes($text_response)
 	{
-		$attr_array = [];
-		// create new DOMDocument Object
-		$dom = new DOMDocument();
-		// Fix possible whitspace problems
-		$dom->preserveWhiteSpace = false;
+		$attr_array              = [];
+		$dom                     = new DOMDocument();
+		$dom->preserveWhiteSpace = false;// Fix possible whitspace problems
 		if (($dom->loadXML($text_response))) {
 			$xPath = new DOMXpath($dom);
 			$xPath->registerNamespace('samlp', 'urn:oasis:names:tc:SAML:1.0:protocol');
 			$xPath->registerNamespace('saml', 'urn:oasis:names:tc:SAML:1.0:assertion');
 			$nodelist = $xPath->query("//saml:Attribute");
-
 			if ($nodelist) {
 				foreach ($nodelist as $node) {
 					/** @var DOMElement $node */
@@ -1097,16 +944,16 @@ class Client
 				foreach ($attr_array as $attr_key => $attr_value) {
 					if (count($attr_value) > 1) {
 						$this->attributes[$attr_key] = $attr_value;
-						$this->_Logger->info("* " . $attr_key . "=" . print_r($attr_value, true));
+						$this->_Logger->debug("* " . $attr_key . "=" . print_r($attr_value, true));
 					} else {
 						$this->attributes[$attr_key] = $attr_value[0];
-						$this->_Logger->info("* " . $attr_key . "=" . $attr_value[0]);
+						$this->_Logger->debug("* " . $attr_key . "=" . $attr_value[0]);
 					}
 				}
 
 				return true;
 			} else {
-				$this->_Logger->info("SAML Attributes are empty");
+				$this->_Logger->debug("SAML Attributes are empty");
 			}
 		}
 
@@ -1132,10 +979,10 @@ class Client
 	 */
 	protected function inExceptArray()
 	{
-		if (starts_with($this->_Url->previous(), self::$_ServerConfig->casBaseServerUri)) {
+		if (starts_with($this->_Url->previous(), $this->CasConfig['server'])) {
 			return false;
 		}
-		foreach (self::$_ServerConfig->casExcept['url'] as $except) {
+		foreach ($this->CasConfig['except']['url'] as $except) {
 			if ($except !== '/') {
 				$except = trim($except, '/');
 			}
@@ -1144,7 +991,7 @@ class Client
 			}
 		}
 		$current_route_name = $this->_Request->route()->getName();
-		foreach (self::$_ServerConfig->casExcept['route'] as $except) {
+		foreach ($this->CasConfig['except']['route'] as $except) {
 			if ($current_route_name == $except) {
 				return true;
 			}
@@ -1156,7 +1003,6 @@ class Client
 				}
 			}
 		}
-
 		return false;
 	}
 
@@ -1186,26 +1032,18 @@ class Client
 			unset($query_params['channel']);
 		}
 		if ($withoutTicket) {
-			unset($query_params[self::$_ServerConfig->casTicketKey]);
+			unset($query_params[$this->CasConfig['ticket_key']]);
 		}
-		unset($query_params[self::$_ServerConfig->casGuardKey]);
-
 		return $this->buildUri(rtrim($request_array[0], '/'), $query_params);
 	}
 
-	public function getRedirectUri($casGuard, $redirect = null)
+	public function getRedirectUri($redirect = null)
 	{
-		$this->casGuardName = $casGuard;
-		if (empty($redirect)) {
-			$redirect = $this->getRequestUri();
-		}
-		return $redirect;
+		return $redirect ?? $this->getRequestUri();
 	}
 
 	/**
-	 * This method returns the URL that should be used for the PGT callback (in
-	 * fact the URL of the current request without any CGI parameter, except if
-	 * phpCAS::setFixedCallbackURL() was used).
+	 * This method returns the URL that should be used for the PGT callback (infact the URL of the current request without any CGI parameter, except if phpCAS::setFixedCallbackURL() was used).
 	 *
 	 * @return string callback URL
 	 */
@@ -1215,7 +1053,6 @@ class Client
 			$request_array     = explode('?', $this->_Url->current(), 1);
 			$this->callbackUri = $request_array[0];
 		}
-
 		return $this->callbackUri;
 	}
 
@@ -1229,7 +1066,6 @@ class Client
 		if (empty($this->allowedProxyChains)) {
 			$this->allowedProxyChains = new ProxyChainAllowedList();
 		}
-
 		return $this->allowedProxyChains;
 	}
 
@@ -1240,7 +1076,7 @@ class Client
 	 */
 	protected function getTicketValidateUri()
 	{
-		return $this->buildUri(self::$_ServerConfig->casBaseServerUri . self::$_ServerConfig->casGuard[$this->casGuardName] . self::$_ServerConfig->casValidateUri, [
+		return $this->buildUri($this->CasConfig['server'] . $this->getValidateUri(), [
 			'service' => $this->getRequestUri()
 		]);
 	}
@@ -1252,45 +1088,18 @@ class Client
 	 */
 	public function getProxyTicketValidateUri()
 	{
-		return $this->buildUri(self::$_ServerConfig->casBaseServerUri . self::$_ServerConfig->casGuard[$this->casGuardName] . self::$_ServerConfig->casProxyValidateUri, [
+		return $this->buildUri($this->CasConfig['server'] . $this->getProxyValidateUri(), [
 			'service' => $this->getRequestUri()
 		]);
 	}
 
-	/**
-	 * This method is used to retrieve the SAML validating URL of the CAS server.
-	 *
-	 * @param bool $renew
-	 *
-	 * @return string samlValidate URL.
-	 */
-	public function getSamlValidateUri($renew = false)
-	{
-		$params['TARGET'] = $this->getRequestUri();
-		if ($renew) {
-			$params['renew'] = 'true';
-		}
-
-		return $this->buildUri($this::$_ServerConfig->casBaseServerUri . $this::$_ServerConfig->casSamlValidateUri, $params);
-	}
-
-	public function handLoginRequest(string $gurad, callable $callback, $renew = false)
+	public function handLoginRequest(callable $callback, $renew = false)
 	{
 		//isAuthenticated()验证为false时会自动抛出异常
-		if ($this->isAuthenticated($gurad, $renew)) {
+		if ($this->isAuthenticated($renew)) {
 			$callback($this->getUser());
 		}
-		return $this->makeRedirectResponse($this->getRequestUri());
-	}
-
-	/**
-	 * check if fake cas auth
-	 *
-	 * @return bool
-	 */
-	public function checkFake()
-	{
-		return $this::$_ServerConfig->casFake;
+		return $this->_Redirect->to($this->getRequestUri());
 	}
 
 	public function isLogoutRequest()
@@ -1301,34 +1110,33 @@ class Client
 	public function handLogoutRequest($checkClient = true, $allowedClients = [])
 	{
 		if ($this->isLogoutRequest()) {
-			$this->_Logger->info("登出请求来过");
+			$this->_Logger->debug("登出请求来过");
 			$decoded_logout_rq = urldecode($_POST['logoutRequest']);
-			$this->_Logger->info("SAML REQUEST: " . $decoded_logout_rq);
+			$this->_Logger->debug("SAML REQUEST: " . $decoded_logout_rq);
 			$allowed   = false;
 			$client_ip = $this->_Request->ip();
 			$client    = gethostbyaddr($client_ip);
 			if ($checkClient) {
 				if (empty($allowedClients)) {
-					//TODO:验证服务器地址
-					$allowedClients = [$this::$_ServerConfig->casHostName];
+					$allowedClients = [$this->CasConfig['server']];//TODO:验证服务器地址
 				}
-				$this->_Logger->info("Client: {$client}/{$client_ip}");
+				$this->_Logger->debug("Client: {$client}/{$client_ip}");
 				foreach ($allowedClients as $allowedClient) {
 					if (($client == $allowedClient) || ($client_ip == $allowedClient)) {
-						$this->_Logger->info("Allowed client `{$allowedClient}` matches, logout request is allowed");
+						$this->_Logger->debug("Allowed client `{$allowedClient}` matches, logout request is allowed");
 						$allowed = true;
 						break;
 					} else {
-						$this->_Logger->info("Allowed client `{$allowedClient}` does not match");
+						$this->_Logger->debug("Allowed client `{$allowedClient}` does not match");
 					}
 				}
 			} else {
-				$this->_Logger->info("No access control set");
+				$this->_Logger->debug("No access control set");
 				$allowed = true;
 			}
 			// If Logout command is permitted proceed with the logout
 			if ($allowed) {
-				$this->_Logger->info("Logout command allowed");
+				$this->_Logger->debug("Logout command allowed");
 				// Rebroadcast the logout request
 				//TODO:广播未监测
 				if ($this->rebroadcast && !isset($_POST['rebroadcast'])) {
@@ -1365,7 +1173,7 @@ class Client
 				}
 				*/
 			} else {
-				$this->_Logger->error("Unauthorized logout request from client '" . $client . "'");
+				$this->_Logger->notice("Unauthorized logout request from client '" . $client . "'");
 			}
 		}
 	}
@@ -1393,17 +1201,14 @@ class Client
 
 		for ($i = 0; $i < sizeof($this->rebroadcastNodes); $i++) {
 			if ((($this->getNodeType($this->rebroadcastNodes[$i]) == CasConst::HOSTNAME) && !empty($dns) && (stripos($this->rebroadcastNodes[$i], $dns) === false)) || (($this->getNodeType($this->rebroadcastNodes[$i]) == CasConst::IP) && !empty($ip) && (stripos($this->rebroadcastNodes[$i], $ip) === false))) {
-				$this->_Logger->info('Rebroadcast target URL: ' . $this->rebroadcastNodes[$i] . $this->_Request->server('REQUEST_URI'));
+				$this->_Logger->debug('Rebroadcast target URL: ' . $this->rebroadcastNodes[$i] . $this->_Request->server('REQUEST_URI'));
 				/** @var CurlRequest $request */
 				$request = new $this->requestImplementation();
-
 				$url = $this->rebroadcastNodes[$i] . $this->_Request->server('REQUEST_URI');
 				$request->setUrl($url);
-
 				if (count($this->rebroadcastHeaders)) {
 					$request->addHeaders($this->rebroadcastHeaders);
 				}
-
 				$request->makePost();
 				if ($type == CasConst::LOGOUT) {
 					// Logout request
@@ -1419,10 +1224,9 @@ class Client
 					CURLOPT_CONNECTTIMEOUT => 1,
 					CURLOPT_TIMEOUT        => 4
 				]);
-
 				$multiRequest->addRequest($request);
 			} else {
-				$this->_Logger->info("Rebroadcast not sent to self: {$this->rebroadcastNodes[$i]} ==" . (empty($ip) ? '' : $ip) . '/' . (empty($dns) ? '' : $dns));
+				$this->_Logger->debug("Rebroadcast not sent to self: {$this->rebroadcastNodes[$i]} ==" . (empty($ip) ? '' : $ip) . '/' . (empty($dns) ? '' : $dns));
 			}
 		}
 		// We need at least 1 request

@@ -22,54 +22,54 @@ class Cas
 	/**
 	 * Get phpcas login uri
 	 *
-	 * @param string $casGuard cas guard
+	 * @param string $guard    cas guard
 	 * @param string $redirect redirect back uri
 	 * @param bool   $gateway
 	 * @param bool   $renew
 	 *
 	 * @return string
 	 */
-	public function getLoginUri(string $casGuard, string $redirect = null, bool $gateway = false, bool $renew = false)
+	public function getLoginUri(string $guard, string $redirect = null, bool $gateway = false, bool $renew = false)
 	{
-		return $this->_Client->getLoginUri($casGuard, $redirect, $gateway, $renew);
+		return $this->_Client->setGuard($guard)->getLoginUri($redirect, $gateway, $renew);
 	}
 
 	/**
 	 * Get phpcas register uri
 	 *
-	 * @param string $casGuard cas guard
+	 * @param string $guard    cas guard
 	 * @param string $redirect redirect back uri
 	 *
 	 * @return string
 	 */
-	public function getRegisterUri(string $casGuard, string $redirect = null)
+	public function getRegisterUri(string $guard, string $redirect = null)
 	{
-		return $this->_Client->getRegisterUri($casGuard, $redirect);
+		return $this->_Client->setGuard($guard)->getRegisterUri($redirect);
 	}
 
 	/**
 	 * Get phpcas logout uri
 	 *
-	 * @param string $casGuard cas guard
+	 * @param string $guard    cas guard
 	 * @param string $redirect redirect back uri
 	 *
 	 * @return string
 	 */
-	public function getLogoutUri(string $casGuard, string $redirect = null)
+	public function getLogoutUri(string $guard, string $redirect = null)
 	{
-		return $this->_Client->getLogoutUri($casGuard, $redirect);
+		return $this->_Client->setGuard($guard)->getLogoutUri($redirect);
 	}
 
 	/**
 	 * get the find password uri
 	 *
-	 * @param string $casGuard cas guard
+	 * @param string $guard cas guard
 	 *
 	 * @return string
 	 */
-	public function getFindPasswordUri(string $casGuard)
+	public function getFindPasswordUri(string $guard)
 	{
-		return $this->_Client->getFindPasswordUri($casGuard);
+		return $this->_Client->setGuard($guard)->getFindPasswordUri();
 	}
 
 	/**
@@ -83,15 +83,15 @@ class Cas
 	/**
 	 * check the cas authentication while the ticket is received
 	 *
-	 * @param string   $casGuard
+	 * @param string   $guard
 	 * @param callable $authSuccessCallback
 	 *
 	 * @return \Illuminate\Http\RedirectResponse|null
 	 */
-	public function checkAuthentication(string $casGuard, callable $authSuccessCallback)
+	public function checkAuthentication(string $guard, callable $authSuccessCallback)
 	{
-		if ($this->_Client->hasTicket()) {
-			return $this->_Client->handLoginRequest($casGuard, $authSuccessCallback);
+		if ($this->_Client->setGuard($guard)->hasTicket()) {
+			return $this->_Client->setGuard($guard)->handLoginRequest($authSuccessCallback);
 		}
 		return null;
 	}
