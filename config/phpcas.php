@@ -18,7 +18,6 @@ return [
 		'server'            => 'http://172.16.30.60:8080/cas',
 		'login_uri'         => '',
 		'logout_uri'        => '/logout',
-		'register_uri'      => '/crm/platform/register.html',
 		'find_password_uri' => '',
 		'version'           => '2.0',
 		'channel'           => env('APP_NAME', null),

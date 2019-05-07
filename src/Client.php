@@ -229,23 +229,6 @@ class Client
 	}
 
 	/**
-	 * Get phpcas register uri
-	 *
-	 * @param string $redirect redirect back uri
-	 *
-	 * @return string
-	 */
-	public function getRegisterUri($redirect = null)
-	{
-		$url = $this->buildUri($this->CasConfig['server'] . $this->CasConfig['register_uri'], [
-			'service' => $this->getRedirectUri($redirect),
-			'channel' => $this->CasConfig['channel']
-		]);
-		$this->_Logger->debug('【单点登陆】注册地址', ['url' => $url]);
-		return $url;
-	}
-
-	/**
 	 * Get phpcas logout uri
 	 *
 	 * @param string $redirect redirect back uri

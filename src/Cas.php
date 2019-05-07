@@ -35,19 +35,6 @@ class Cas
 	}
 
 	/**
-	 * Get phpcas register uri
-	 *
-	 * @param string $guard    cas guard
-	 * @param string $redirect redirect back uri
-	 *
-	 * @return string
-	 */
-	public function getRegisterUri(string $guard, string $redirect = null)
-	{
-		return $this->_Client->setGuard($guard)->getRegisterUri($redirect);
-	}
-
-	/**
 	 * Get phpcas logout uri
 	 *
 	 * @param string $guard    cas guard
