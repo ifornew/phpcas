@@ -40,7 +40,7 @@ class AuthenticationException extends RuntimeException implements CasException
 			if ($bad_response) {
 				$messages[] = 'Reason: bad response from the CAS server';
 			} else {
-				switch ($client->getServerVersion()) {
+				switch ($client->getVersion()) {
 					case CasConst::CAS_VERSION_1_0:
 						$messages[] = 'Reason: CAS error';
 						break;
