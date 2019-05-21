@@ -269,10 +269,10 @@ class Client
 		if (empty($this->ticket)) {
 			$ticket = $this->_Request->get($this->CasConfig['ticket_key'], null);
 			if (preg_match('/^[SP]T-/', $ticket)) {
-				$this->_Logger->debug("Ticket `{$ticket}` found");
 				$this->ticket = $ticket;
+				$this->_Logger->debug("Ticket `{$ticket}` found");
 			} else {
-				$this->_Logger->warning('ill-formed ticket found in the URL (' . $this->CasConfig['ticket_key'] . '=`' . htmlentities($ticket) . '\')');
+				$this->_Logger->debug('ill-formed ticket found in the URL (' . $this->CasConfig['ticket_key'] . '=`' . htmlentities($ticket) . '`)');
 			}
 		}
 		return $this->ticket;
@@ -434,9 +434,9 @@ class Client
 		}
 		switch ($this->getVersion()) {
 			case CasConst::CAS_VERSION_1_0:
-				$this->_Logger->debug("CAS 1.0 ticket '{$this->getTicket()}' is present");
+				$this->_Logger->debug("CAS {$this->getVersion()} ticket '{$this->getTicket()}' is present");
 				$this->validateCAS10($validate_url, $text_response, $renew); // if it fails, it halts
-				$this->_Logger->debug("CAS 1.0 ticket '{$this->getTicket()}' was validated");
+				$this->_Logger->debug("CAS {$this->getVersion()} ticket '{$this->getTicket()}' was validated");
 				return true;
 			case CasConst::CAS_VERSION_2_0:
 			case CasConst::CAS_VERSION_3_0:
@@ -453,9 +453,9 @@ class Client
 				}
 				return true;
 			case CasConst::SAML_VERSION_1_1:
-				$this->_Logger->debug("SAML 1.1 ticket `{$this->getTicket()}` is present");
+				$this->_Logger->debug("SAML {$this->getVersion()} ticket `{$this->getTicket()}` is present");
 				$this->validateSA($validate_url, $text_response, $tree_response, $renew); // if it fails, it halts
-				$this->_Logger->debug("SAML 1.1 ticket `{$this->getTicket()}` was validated");
+				$this->_Logger->debug("SAML {$this->getVersion()} ticket `{$this->getTicket()}` was validated");
 				return true;
 			default:
 				$this->_Logger->debug('Protocoll error');
@@ -661,8 +661,7 @@ class Client
 			$query_params['renew'] = 'true';
 		}
 		$validate_url = $this->buildUri($validate_base_url, $query_params);
-		$this->_Logger->debug('【单点登陆】构建验证地址的源地址', ['validate_base_url' => $validate_base_url]);
-		$this->_Logger->debug('【单点登陆】凭据验证地址', ['ticket' => $this->getTicket(), 'url' => $validate_url]);
+		$this->_Logger->debug('【单点登陆】构建验证地址', ['validate_base_url' => $validate_base_url, 'validate_url' => $validate_url]);
 		if (!$this->readUri($validate_url, $headers, $text_response, $err_msg)) {
 			$this->_Logger->notice('could not open URL \'' . $validate_url . '\' to validate (' . $err_msg . ')');
 			throw new AuthenticationException(
