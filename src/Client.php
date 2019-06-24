@@ -271,7 +271,7 @@ class Client
 			if (preg_match('/^[SP]T-/', $ticket)) {
 				$this->ticket = $ticket;
 				$this->_Logger->debug("Ticket `{$ticket}` found");
-			} else {
+			} elseif (!empty($ticket)) {
 				$this->_Logger->debug('ill-formed ticket found in the URL (' . $this->CasConfig['ticket_key'] . '=`' . htmlentities($ticket) . '`)');
 			}
 		}
