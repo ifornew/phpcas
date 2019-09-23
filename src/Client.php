@@ -224,7 +224,7 @@ class Client
 		}
 
 		$url = $this->buildUri($this->CasConfig['server'] . $this->CasConfig['login_uri'], $params);
-		$this->_Logger->debug('【单点登陆】登陆地址', ['url' => $url]);
+		$this->_Logger->debug('【单点登录】登录地址', ['url' => $url]);
 		return $url;
 	}
 
@@ -245,7 +245,7 @@ class Client
 			'service' => $this->getRedirectUri($redirect),
 			'channel' => $this->CasConfig['channel']
 		]);
-		$this->_Logger->debug('【单点登陆】注销地址', ['url' => $url]);
+		$this->_Logger->debug('【单点登录】注销地址', ['url' => $url]);
 		return $url;
 	}
 
@@ -661,7 +661,7 @@ class Client
 			$query_params['renew'] = 'true';
 		}
 		$validate_url = $this->buildUri($validate_base_url, $query_params);
-		$this->_Logger->debug('【单点登陆】构建验证地址', ['validate_base_url' => $validate_base_url, 'validate_url' => $validate_url]);
+		$this->_Logger->debug('【单点登录】构建验证地址', ['validate_base_url' => $validate_base_url, 'validate_url' => $validate_url]);
 		if (!$this->readUri($validate_url, $headers, $text_response, $err_msg)) {
 			$this->_Logger->notice('could not open URL \'' . $validate_url . '\' to validate (' . $err_msg . ')');
 			throw new AuthenticationException(
